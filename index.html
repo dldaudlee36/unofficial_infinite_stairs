@@ -415,7 +415,7 @@ function drawPlayerSprite(x, y) {
   ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
   ctx.scale(player.dir * player.scaleX, player.scaleY);
 
-  // 캐릭터 발밑 그림자 (1.7배 크기 반영)
+  // 캐릭터 발밑 그림자
   ctx.fillStyle = "rgba(0, 242, 254, 0.25)";
   ctx.beginPath();
   ctx.ellipse(0, -player.bounceY, 20, 6, 0, 0, Math.PI * 2);
@@ -432,14 +432,28 @@ function drawPlayerSprite(x, y) {
     let sx = 0, sy = 0, sw = totalW, sh = totalH;
 
     if (char.sourceKey === "sheet8") {
+      // 검은색 구분선 회피를 위한 정밀 그리드 연산
       const blockW = totalW / 2;
       const blockH = totalH / 4;
-      sw = blockW / 4;
-      sh = blockH / 2;
+      const rawCellW = blockW / 4;
+      const rawCellH = blockH / 2;
+
       const blockX = char.grid.col * blockW;
       const blockY = char.grid.row * blockH;
-      sx = blockX + (frame === 0 ? sw * 1 : sw * 3);
-      sy = blockY;
+
+      // 상단 검은 가로선 및 외곽 테두리를 잘라내기 위한 세이프 마진(Inset) 적용
+      const padTop = rawCellH * 0.12;   // 상단 검은색 구분선 완벽 제거
+      const padBottom = rawCellH * 0.04;
+      const padX = rawCellW * 0.08;     // 좌우 구분선 여백 배제
+
+      const cellX = blockX + (frame === 0 ? rawCellW * 1 : rawCellW * 3);
+      const cellY = blockY;
+
+      sx = cellX + padX;
+      sy = cellY + padTop;
+      sw = rawCellW - (padX * 2);
+      sh = rawCellH - (padTop + padBottom);
+
     } else if (char.sourceKey === "pixel1" || char.sourceKey === "pixel2") {
       sw = totalW / 4;
       sh = totalH / 4;
@@ -450,7 +464,7 @@ function drawPlayerSprite(x, y) {
       sw = totalW; sh = totalH;
     }
 
-    // 1.7배 크기 보정 (44px * 1.7 ≈ 75px)
+    // 1.7배 크기 비율 고정 유지
     const TARGET_MAX_H = 75;
     const TARGET_MAX_W = 75;
     const aspect = sw / sh;
@@ -464,6 +478,7 @@ function drawPlayerSprite(x, y) {
       drawW = TARGET_MAX_H * aspect;
     }
 
+    // 발바닥 기준 렌더링
     ctx.drawImage(src, sx, sy, sw, sh, -drawW / 2, -drawH, drawW, drawH);
 
   } else {
