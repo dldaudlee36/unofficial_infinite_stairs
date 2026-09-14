@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Cosmic Infinite Stairs - 키 매핑 반전 옵션 탑재판</title>
+  <title>Cosmic Infinite Stairs</title>
   <style>
     * {
       box-sizing: border-box;
@@ -28,7 +28,7 @@
       width: 100vw;
       max-width: 420px;
       height: 100vh;
-      max-height: 860px;
+      max-height: 880px;
       background: #08061a;
       border: 2px solid #2d1b54;
       box-shadow: 0 0 40px rgba(138, 43, 226, 0.25);
@@ -36,6 +36,41 @@
       flex-direction: column;
       overflow: hidden;
     }
+
+    /* 캔버스와 분리된 독립 최상단 헤더 바 */
+    #top-bar {
+      height: 44px;
+      background: #0d0926;
+      border-bottom: 1px solid #231647;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 20;
+    }
+    .app-title {
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      color: #7928ca;
+      text-transform: uppercase;
+    }
+    #swap-toggle-btn {
+      background: #161038;
+      border: 1px solid #00f2fe;
+      border-radius: 14px;
+      color: #00f2fe;
+      font-size: 11px;
+      font-weight: bold;
+      padding: 4px 10px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 242, 254, 0.2);
+      transition: all 0.15s ease;
+    }
+    #swap-toggle-btn:active {
+      transform: scale(0.95);
+    }
+
     #canvas-wrap {
       flex: 1;
       position: relative;
@@ -46,29 +81,6 @@
       width: 100%;
       height: 100%;
       image-rendering: pixelated;
-    }
-    
-    /* 상단 키 반전 설정 토글 버튼 */
-    #swap-toggle-btn {
-      position: absolute;
-      top: 15px;
-      right: 15px;
-      background: rgba(20, 15, 45, 0.85);
-      border: 1px solid #00f2fe;
-      border-radius: 20px;
-      color: #00f2fe;
-      font-size: 12px;
-      font-weight: bold;
-      padding: 6px 12px;
-      cursor: pointer;
-      z-index: 20;
-      box-shadow: 0 2px 10px rgba(0, 242, 254, 0.25);
-      transition: all 0.2s ease;
-    }
-    #swap-toggle-btn:active {
-      transform: scale(0.95);
-      background: #00f2fe;
-      color: #05030e;
     }
 
     #touch-controller {
@@ -168,15 +180,17 @@
 <body>
 
 <div id="mobile-frame">
-  <button id="swap-toggle-btn">🔄 키 반전: OFF</button>
+  <!-- 독립 상단 헤더 -->
+  <div id="top-bar">
+    <div class="app-title">Cosmic Stairs</div>
+    <button id="swap-toggle-btn">🔄 키 반전: OFF</button>
+  </div>
 
   <div id="canvas-wrap">
-    <canvas id="gameCanvas" width="400" height="580"></canvas>
+    <canvas id="gameCanvas" width="400" height="560"></canvas>
   </div>
   
-  <div id="touch-controller">
-    <!-- 동적으로 생성되는 2개 버튼 영역 -->
-  </div>
+  <div id="touch-controller"></div>
 
   <div id="character-roster"></div>
 </div>
@@ -185,7 +199,6 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// 오디오
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function playBeep(freq, type = "sine", duration = 0.04) {
   if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -201,7 +214,6 @@ function playBeep(freq, type = "sine", duration = 0.04) {
   osc.stop(audioCtx.currentTime + duration);
 }
 
-// 계단 규격
 const STAIR_W = 58;
 const STAIR_H = 30;
 const ANCHOR_X = canvas.width / 2;
@@ -218,7 +230,6 @@ let camY = 0;
 let targetCamX = 0;
 let targetCamY = 0;
 
-// 키 매핑 반전 상태
 let isSwapped = false;
 
 const characters = [
@@ -246,7 +257,6 @@ const spaceStars = Array.from({ length: 45 }, () => ({
   glowSpeed: Math.random() * 0.02 + 0.01
 }));
 
-// 스프라이트 맵 정의
 const PALETTES = {
   boxer: {
     '.': null,
@@ -352,7 +362,6 @@ function drawPixelMatrix(charKey, x, y, scale = 2.4) {
   }
 }
 
-// 하단 컨트롤러 동적 생성 (반전 상태 반영)
 function renderControls() {
   const controller = document.getElementById("touch-controller");
   controller.innerHTML = "";
@@ -398,7 +407,6 @@ function renderControls() {
   bind(climbBtn, false);
 }
 
-// 반전 토글 바인딩
 const swapToggleBtn = document.getElementById("swap-toggle-btn");
 swapToggleBtn.addEventListener("click", () => {
   isSwapped = !isSwapped;
@@ -534,7 +542,6 @@ function gameOver() {
   checkUnlocks();
 }
 
-// 키보드 이벤트 핸들러 (반전 옵션 적용)
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
   if (e.code === "Space" && gameState === "GAMEOVER") {
@@ -547,11 +554,11 @@ window.addEventListener("keydown", (e) => {
   const isRight = (e.key === "x" || e.key === "X" || e.key === "ArrowUp");
 
   if (!isSwapped) {
-    if (isLeft) step(true);      // 방향 전환
-    else if (isRight) step(false); // 오르기
+    if (isLeft) step(true);
+    else if (isRight) step(false);
   } else {
-    if (isLeft) step(false);     // 오르기
-    else if (isRight) step(true);  // 방향 전환
+    if (isLeft) step(false);
+    else if (isRight) step(true);
   }
 });
 
@@ -694,7 +701,6 @@ function draw() {
   });
 }
 
-// 셋업 및 초기화
 renderControls();
 renderCharacterRoster();
 initGame();
