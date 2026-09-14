@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Cosmic Infinite Stairs - 전체 캐릭터 즉시 선택판</title>
+  <title>Cosmic Infinite Stairs - 비율 고정 & 전 이미지 투명화</title>
   <style>
     * {
       box-sizing: border-box;
@@ -126,7 +126,6 @@
       color: #facc15;
     }
 
-    /* 상시 선택 가능한 캐릭터 캐러셀 */
     #character-roster {
       height: 95px;
       background: #05030f;
@@ -310,17 +309,58 @@ function playBeep(freq, type = "sine", duration = 0.04) {
   osc.stop(audioCtx.currentTime + duration);
 }
 
-// 이미지 리소스 (방식 2 규격)
-const images = {
+// ==========================================
+// 모든 이미지 전역 크로마키(투명화) 파이프라인
+// ==========================================
+const rawImages = {
   sheet8: new Image(),
-  amongUs: new Image(),
-  charVec: new Image(),
-  spriteSheet: new Image()
+  among: new Image(),
+  pixel1: new Image(),
+  pixel2: new Image()
 };
-images.sheet8.src = "sheet8.png";
-images.amongUs.src = "among.svg";
-images.charVec.src = "pixel1.svg";
-images.spriteSheet.src = "pixel2.svg";
+
+// 투명 처리 완료된 오프스크린 캔버스 캐시
+const processedCanvases = {
+  sheet8: null,
+  among: null,
+  pixel1: null,
+  pixel2: null
+};
+
+function processChromaKey(img, key) {
+  try {
+    const off = document.createElement("canvas");
+    off.width = img.naturalWidth || img.width;
+    off.height = img.naturalHeight || img.height;
+    const octx = off.getContext("2d");
+    octx.drawImage(img, 0, 0);
+
+    const imgData = octx.getImageData(0, 0, off.width, off.height);
+    const d = imgData.data;
+
+    // 흰색 및 밝은 회색 계열(R,G,B > 235) 픽셀 완전 투명화
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] > 235 && d[i + 1] > 235 && d[i + 2] > 235) {
+        d[i + 3] = 0;
+      }
+    }
+    octx.putImageData(imgData, 0, 0);
+    processedCanvases[key] = off;
+  } catch (err) {
+    // CORS 보안 제약 발생 시 원본 이미지 대체
+    processedCanvases[key] = img;
+  }
+}
+
+// 이미지별 로드 바인딩
+Object.keys(rawImages).forEach(key => {
+  rawImages[key].onload = () => processChromaKey(rawImages[key], key);
+});
+
+rawImages.sheet8.src = "sheet8.png";
+rawImages.among.src = "among.svg";
+rawImages.pixel1.src = "pixel1.svg";
+rawImages.pixel2.src = "pixel2.svg";
 
 // 계단 물리 규격
 const STAIR_W = 58;
@@ -345,19 +385,19 @@ const keyBindings = {
 };
 let listeningTarget = null;
 
-// 11종 전체 캐릭터 (전부 즉시 선택 가능)
+// 11종 전체 캐릭터 메타데이터
 const characters = [
-  { id: "businessman", name: "비즈니스맨", type: "sheet8", grid: { col: 1, row: 2 } },
-  { id: "boxer", name: "복서", type: "sheet8", grid: { col: 0, row: 1 } },
-  { id: "dracula", name: "드라큘라", type: "sheet8", grid: { col: 0, row: 3 } },
-  { id: "delivery", name: "택배기사", type: "sheet8", grid: { col: 1, row: 3 } },
-  { id: "sheriff", name: "보안관", type: "sheet8", grid: { col: 1, row: 1 } },
-  { id: "tennis", name: "테니스선수", type: "sheet8", grid: { col: 0, row: 2 } },
-  { id: "soldier", name: "근위병", type: "sheet8", grid: { col: 0, row: 0 } },
-  { id: "bunny", name: "바니걸", type: "sheet8", grid: { col: 1, row: 0 } },
-  { id: "among", name: "어몽어스", type: "among" },
-  { id: "redboy", name: "빨간티소년", type: "charVec" },
-  { id: "redhair", name: "붉은머리소년", type: "spriteSheet" }
+  { id: "businessman", name: "비즈니스맨", sourceKey: "sheet8", grid: { col: 1, row: 2 } },
+  { id: "boxer", name: "복서", sourceKey: "sheet8", grid: { col: 0, row: 1 } },
+  { id: "dracula", name: "드라큘라", sourceKey: "sheet8", grid: { col: 0, row: 3 } },
+  { id: "delivery", name: "택배기사", sourceKey: "sheet8", grid: { col: 1, row: 3 } },
+  { id: "sheriff", name: "보안관", sourceKey: "sheet8", grid: { col: 1, row: 1 } },
+  { id: "tennis", name: "테니스선수", sourceKey: "sheet8", grid: { col: 0, row: 2 } },
+  { id: "soldier", name: "근위병", sourceKey: "sheet8", grid: { col: 0, row: 0 } },
+  { id: "bunny", name: "바니걸", sourceKey: "sheet8", grid: { col: 1, row: 0 } },
+  { id: "among", name: "어몽어스", sourceKey: "among" },
+  { id: "redboy", name: "빨간티소년", sourceKey: "pixel1" },
+  { id: "redhair", name: "붉은머리소년", sourceKey: "pixel2" }
 ];
 let currentSelectedChar = "businessman";
 
@@ -381,57 +421,70 @@ const spaceStars = Array.from({ length: 45 }, () => ({
   glowSpeed: Math.random() * 0.02 + 0.01
 }));
 
+// ==========================================
+// 비율 고정 축소 스프라이트 렌더러
+// ==========================================
 function drawPlayerSprite(x, y) {
   ctx.save();
   ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
   ctx.scale(player.dir * player.scaleX, player.scaleY);
 
+  // 캐릭터 발밑 그림자
   ctx.fillStyle = "rgba(0, 242, 254, 0.25)";
   ctx.beginPath();
-  ctx.ellipse(0, -player.bounceY, 16, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, -player.bounceY, 14, 4, 0, 0, Math.PI * 2);
   ctx.fill();
 
   const char = characters.find(c => c.id === currentSelectedChar) || characters[0];
+  const src = processedCanvases[char.sourceKey] || rawImages[char.sourceKey];
   const frame = player.animFrame % 2;
 
-  if (char.type === "sheet8" && images.sheet8.complete && images.sheet8.naturalWidth > 0) {
-    const W = images.sheet8.naturalWidth;
-    const H = images.sheet8.naturalHeight;
-    const blockW = W / 2;
-    const blockH = H / 4;
-    const cellW = blockW / 4;
-    const cellH = blockH / 2;
+  if (src && (src.width || src.naturalWidth)) {
+    const totalW = src.width || src.naturalWidth;
+    const totalH = src.height || src.naturalHeight;
 
-    const blockX = char.grid.col * blockW;
-    const blockY = char.grid.row * blockH;
+    let sx = 0, sy = 0, sw = totalW, sh = totalH;
 
-    const sx = blockX + (frame === 0 ? cellW * 1 : cellW * 3);
-    const sy = blockY;
-
-    const drawSize = 46;
-    ctx.drawImage(images.sheet8, sx, sy, cellW, cellH, -drawSize / 2, -drawSize, drawSize, drawSize);
-
-  } else if (char.type === "among" && images.amongUs.complete) {
-    const drawW = 38;
-    const drawH = 46;
-    ctx.drawImage(images.amongUs, -drawW / 2, -drawH, drawW, drawH);
-
-  } else if (char.type === "charVec" || char.type === "spriteSheet") {
-    const img = char.type === "charVec" ? images.charVec : images.spriteSheet;
-    if (img.complete && img.naturalWidth > 0) {
-      const W = img.naturalWidth;
-      const H = img.naturalHeight;
-      const cellW = W / 4;
-      const cellH = H / 4;
-      const sx = (frame * 2 + 1) * cellW;
-      const sy = 2 * cellH;
-
-      const drawSize = 40;
-      ctx.drawImage(img, sx, sy, cellW, cellH, -drawSize / 2, -drawSize, drawSize, drawSize);
+    if (char.sourceKey === "sheet8") {
+      const blockW = totalW / 2;
+      const blockH = totalH / 4;
+      sw = blockW / 4;
+      sh = blockH / 2;
+      const blockX = char.grid.col * blockW;
+      const blockY = char.grid.row * blockH;
+      sx = blockX + (frame === 0 ? sw * 1 : sw * 3);
+      sy = blockY;
+    } else if (char.sourceKey === "pixel1" || char.sourceKey === "pixel2") {
+      sw = totalW / 4;
+      sh = totalH / 4;
+      sx = (frame * 2 + 1) * sw;
+      sy = 2 * sh; // 측면 걷기 모션
+    } else if (char.sourceKey === "among") {
+      sx = 0; sy = 0;
+      sw = totalW; sh = totalH;
     }
+
+    // 캐릭터 비율(Aspect Ratio) 엄격 고정 축소 계산
+    const TARGET_MAX_H = 44; // 계단 높이에 맞춘 표준 캐릭터 세로 크기
+    const TARGET_MAX_W = 44;
+    const aspect = sw / sh;
+
+    let drawW, drawH;
+    if (aspect > 1) {
+      drawW = TARGET_MAX_W;
+      drawH = TARGET_MAX_W / aspect;
+    } else {
+      drawH = TARGET_MAX_H;
+      drawW = TARGET_MAX_H * aspect;
+    }
+
+    // 발바닥(y=0) 기준 중심 정렬 렌더링
+    ctx.drawImage(src, sx, sy, sw, sh, -drawW / 2, -drawH, drawW, drawH);
+
   } else {
+    // 로딩 대기 대체 박스
     ctx.fillStyle = "#00f2fe";
-    ctx.fillRect(-12, -36, 24, 36);
+    ctx.fillRect(-10, -32, 20, 32);
   }
 
   ctx.restore();
@@ -500,7 +553,6 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// 상시 선택 캐릭터 캐러셀 렌더러
 function renderCharacterRoster() {
   const roster = document.getElementById("character-roster");
   roster.innerHTML = "";
@@ -597,9 +649,9 @@ function step(isTurn) {
     energy = Math.min(MAX_ENERGY, energy + 0.13);
 
     player.animFrame = (player.animFrame + 1) % 2;
-    player.bounceY = -7;
-    player.scaleX = 0.9;
-    player.scaleY = 1.15;
+    player.bounceY = -6;
+    player.scaleX = 0.92;
+    player.scaleY = 1.12;
 
     targetCamX = player.x * STAIR_W;
     targetCamY = player.y * STAIR_H;
