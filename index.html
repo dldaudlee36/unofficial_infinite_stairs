@@ -2,11 +2,11 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>무한의 계단 - 원작 메커니즘 완벽 검증판</title>
+  <title>무한의 계단 - 실제 게임 스킨 구현판</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #08090d;
+      background: #1a1c23;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -19,28 +19,29 @@
     }
     #game-container {
       position: relative;
-      border: 3px solid #334155;
-      border-radius: 12px;
+      border: 4px solid #4a3425;
+      border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 0 40px rgba(0, 242, 254, 0.15);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
     }
     canvas {
       display: block;
-      background: #0f172a;
+      background: #4da64d;
+      image-rendering: pixelated;
     }
     #guide {
       margin-top: 14px;
       display: flex;
       gap: 16px;
       font-size: 14px;
-      color: #94a3b8;
+      color: #cbd5e1;
     }
     .badge {
-      background: #1e293b;
+      background: #334155;
       padding: 3px 8px;
       border-radius: 4px;
-      border: 1px solid #475569;
-      color: #38bdf8;
+      border: 1px solid #64748b;
+      color: #facc15;
       font-weight: bold;
     }
   </style>
@@ -48,26 +49,26 @@
 <body>
 
 <div id="game-container">
-  <canvas id="gameCanvas" width="400" height="640"></canvas>
+  <canvas id="gameCanvas" width="380" height="620"></canvas>
 </div>
 <div id="guide">
-  <div><span class="badge">Z</span> 또는 <span class="badge">←</span> : 방향 전환 (돌면서 오르기)</div>
-  <div><span class="badge">X</span> 또는 <span class="badge">↑</span> : 오르기 (바라보는 쪽으로)</div>
+  <div><span class="badge">Z</span> 또는 <span class="badge">←</span> : 방향 전환(돌면서 오르기)</div>
+  <div><span class="badge">X</span> 또는 <span class="badge">↑</span> : 오르기</div>
 </div>
 
 <script>
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// 오디오 신디사이저 (외부 파일 없이 즉시 발음)
+// 오디오
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function playBeep(freq, type = "square", duration = 0.05) {
+function playBeep(freq, type = "square", duration = 0.04) {
   if (audioCtx.state === 'suspended') audioCtx.resume();
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   osc.type = type;
   osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-  gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
   osc.connect(gain);
   gain.connect(audioCtx.destination);
@@ -75,53 +76,44 @@ function playBeep(freq, type = "square", duration = 0.05) {
   osc.stop(audioCtx.currentTime + duration);
 }
 
-// 계단 물리 규격
-const STAIR_W = 56;
-const STAIR_H = 32;
+// 스크린샷 비율에 맞춘 규격
+const STAIR_W = 68;
+const STAIR_H = 34;
 const ANCHOR_X = canvas.width / 2;
 const ANCHOR_Y = canvas.height - 180;
 
-// 게임 상태
-let gameState = "READY"; // READY, PLAY, GAMEOVER
+let gameState = "READY"; 
 let score = 0;
 let energy = 1.0;
 const MAX_ENERGY = 1.0;
 
-// 카메라 스무딩 위치
 let camX = 0;
 let camY = 0;
 let targetCamX = 0;
 let targetCamY = 0;
 
-// 플레이어
 const player = {
   x: 0,
   y: 0,
-  dir: 1, // 1: 우측, -1: 좌측
+  dir: 1,
   squash: 1
 };
 
-// 계단 데이터: { x, y } (단위: 계단 그리드 인덱스)
 let stairs = [];
-let particles = [];
 
 function initGame() {
   score = 0;
   energy = 1.0;
-  stairs = [];
-  
-  // 첫 계단 (플레이어 초기 위치)
-  stairs.push({ x: 0, y: 0 });
+  stairs = [{ x: 0, y: 0 }];
 
-  // 초기 계단 절차적 생성 (연속 같은 방향 1~5회 무작위)
   let curX = 0;
   let curDir = 1;
   let runLength = 3;
 
-  for (let i = 1; i < 100; i++) {
+  for (let i = 1; i < 120; i++) {
     if (runLength <= 0) {
       curDir = -curDir;
-      runLength = Math.floor(Math.random() * 4) + 1; // 1~4회 연속
+      runLength = Math.floor(Math.random() * 4) + 1;
     }
     curX += curDir;
     stairs.push({ x: curX, y: i });
@@ -137,8 +129,6 @@ function initGame() {
   camY = 0;
   targetCamX = 0;
   targetCamY = 0;
-
-  particles = [];
 }
 
 function appendNextStair() {
@@ -146,7 +136,6 @@ function appendNextStair() {
   const prev = stairs[stairs.length - 2];
   let curDir = last.x - prev.x;
 
-  // 35% 확률로 방향 꺾기
   if (Math.random() < 0.35) {
     curDir = -curDir;
   }
@@ -157,63 +146,41 @@ function appendNextStair() {
   });
 }
 
-function spawnLandingParticles(screenX, screenY) {
-  for (let i = 0; i < 6; i++) {
-    particles.push({
-      x: screenX,
-      y: screenY,
-      vx: (Math.random() - 0.5) * 6,
-      vy: -Math.random() * 4 - 1,
-      life: 1.0,
-      color: "#38bdf8"
-    });
-  }
-}
-
-// 핵심 조작 로직 (원작 규칙 엄격 적용)
 function step(isTurn) {
   if (gameState !== "PLAY") return;
 
-  // 1. 방향 전환 시 먼저 몸을 돌림
   if (isTurn) {
     player.dir = -player.dir;
   }
 
-  // 2. 현재 바라보고 있는 방향으로 1칸 전진하며 1칸 상승
   const nextTargetX = player.x + player.dir;
   const nextTargetY = player.y + 1;
-
   const expectedStair = stairs[nextTargetY];
 
-  // 3. 실제 계단의 위치와 플레이어가 내딛은 위치 검증
   if (expectedStair && expectedStair.x === nextTargetX) {
-    // 성공
     player.x = nextTargetX;
     player.y = nextTargetY;
     score++;
-    energy = Math.min(MAX_ENERGY, energy + 0.14);
-    player.squash = 0.7;
+    energy = Math.min(MAX_ENERGY, energy + 0.13);
+    player.squash = 0.8;
 
-    // 카메라 타겟 갱신 (플레이어가 항상 화면 닻점에 위치하도록)
     targetCamX = player.x * STAIR_W;
     targetCamY = player.y * STAIR_H;
 
     appendNextStair();
-    playBeep(400 + (score % 20) * 15, "square", 0.04);
+    playBeep(440 + (score % 15) * 18, "square", 0.04);
   } else {
-    // 헛디딤 -> 낙하 사망
     player.x = nextTargetX;
     player.y = nextTargetY;
-    gameOver("STEP MISSED!");
+    gameOver();
   }
 }
 
-function gameOver(reason) {
+function gameOver() {
   gameState = "GAMEOVER";
-  playBeep(130, "sawtooth", 0.3);
+  playBeep(120, "sawtooth", 0.25);
 }
 
-// 키 입력 이벤트 바인딩
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
 
@@ -225,9 +192,9 @@ window.addEventListener("keydown", (e) => {
     }
   } else if (gameState === "PLAY") {
     if (e.key === "z" || e.key === "Z" || e.key === "ArrowLeft") {
-      step(true); // 방향 전환(돌면서 오르기)
+      step(true);
     } else if (e.key === "x" || e.key === "X" || e.key === "ArrowUp") {
-      step(false); // 오르기
+      step(false);
     }
   } else if (gameState === "GAMEOVER") {
     if (e.code === "Space" || e.key === "r" || e.key === "R") {
@@ -239,68 +206,248 @@ window.addEventListener("keydown", (e) => {
 
 function update() {
   if (gameState === "PLAY") {
-    // 타임 게이지 감소 (점수에 따라 점진적 가속)
-    const drain = 0.0038 + Math.min(score * 0.00007, 0.009);
+    const drain = 0.0035 + Math.min(score * 0.00008, 0.009);
     energy -= drain;
-
     if (energy <= 0) {
       energy = 0;
-      gameOver("TIME OVER!");
+      gameOver();
     }
   }
 
-  // 부드러운 카메라 보간 추적 (Lerp)
   camX += (targetCamX - camX) * 0.35;
   camY += (targetCamY - camY) * 0.35;
-
   player.squash += (1 - player.squash) * 0.25;
+}
 
-  // 파티클 업데이트
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vy += 0.3;
-    p.life -= 0.05;
-    if (p.life <= 0) particles.splice(i, 1);
+// 실제 게임 스크린샷 기반 밀림 배경 렌더링
+function drawJungleBackground() {
+  // 하늘/숲 상단 그라디언트
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  bgGrad.addColorStop(0, "#50a042");
+  bgGrad.addColorStop(0.5, "#2d7c2a");
+  bgGrad.addColorStop(1, "#174e1e");
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 야자수 줄기 패턴
+  ctx.fillStyle = "#4a6838";
+  for (let i = 20; i < canvas.width; i += 75) {
+    ctx.fillRect(i, 0, 16, canvas.height);
+    // 줄기 가로 줄무늬
+    ctx.fillStyle = "#334926";
+    for (let j = 0; j < canvas.height; j += 25) {
+      ctx.fillRect(i, j, 16, 3);
+    }
+    ctx.fillStyle = "#4a6838";
+  }
+
+  // 나뭇잎 덩어리 실루엣
+  ctx.fillStyle = "#388a29";
+  for (let y = -20; y < canvas.height; y += 90) {
+    ctx.beginPath();
+    ctx.arc(40, y, 70, 0, Math.PI * 2);
+    ctx.arc(canvas.width - 30, y + 40, 80, 0, Math.PI * 2);
+    ctx.arc(canvas.width / 2, y + 20, 60, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 바닥 흙길 (하단)
+  ctx.fillStyle = "#d3a654";
+  ctx.beginPath();
+  ctx.moveTo(0, canvas.height);
+  ctx.lineTo(canvas.width, canvas.height - 120);
+  ctx.lineTo(canvas.width, canvas.height);
+  ctx.fill();
+}
+
+// 실제 게임 스크린샷 1:1 석재 점박이 계단 블록 드로잉
+function drawStair(x, y) {
+  const w = STAIR_W;
+  const h = STAIR_H;
+  const rx = Math.floor(x - w / 2);
+  const ry = Math.floor(y);
+
+  // 1. 외곽선 및 입체 본체
+  ctx.fillStyle = "#222222";
+  ctx.fillRect(rx, ry, w, h);
+
+  // 2. 상단면 (밝은 회색)
+  ctx.fillStyle = "#e5e5e5";
+  ctx.fillRect(rx + 2, ry + 2, w - 4, h - 4);
+
+  // 3. 우측/하단 음영 (명암 처리)
+  ctx.fillStyle = "#b5b5b5";
+  ctx.fillRect(rx + w - 6, ry + 2, 4, h - 4);
+  ctx.fillRect(rx + 2, ry + h - 6, w - 4, 4);
+
+  // 4. 스크린샷 특유의 불규칙한 직사각형 점박이 픽셀 텍스처
+  ctx.fillStyle = "#474747";
+  ctx.fillRect(rx + 6, ry + 6, 6, 4);
+  ctx.fillRect(rx + 20, ry + 5, 4, 4);
+  ctx.fillRect(rx + 36, ry + 7, 8, 3);
+  ctx.fillRect(rx + 52, ry + 5, 4, 5);
+
+  ctx.fillStyle = "#666666";
+  ctx.fillRect(rx + 10, ry + 16, 5, 5);
+  ctx.fillRect(rx + 28, ry + 14, 7, 4);
+  ctx.fillRect(rx + 44, ry + 17, 5, 5);
+
+  ctx.fillStyle = "#2b2b2b";
+  ctx.fillRect(rx + 16, ry + 24, 6, 4);
+  ctx.fillRect(rx + 38, ry + 23, 5, 4);
+  ctx.fillRect(rx + 50, ry + 22, 6, 4);
+}
+
+// 스크린샷 인물: 둥근 안경, 갈색 왁스 머리, 남색 정장 비즈니스맨
+function drawPixelCharacter(x, y) {
+  ctx.save();
+  ctx.translate(Math.floor(x), Math.floor(y));
+  ctx.scale(player.dir, player.squash);
+
+  const u = 2.4; // 픽셀 스케일 배율
+
+  // 그림자
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 16, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 1. 구두 (갈색)
+  ctx.fillStyle = "#4a2a18";
+  ctx.fillRect(-4 * u, -2 * u, 8 * u, 2 * u);
+
+  // 2. 바지 (남색)
+  ctx.fillStyle = "#112656";
+  ctx.fillRect(-3 * u, -7 * u, 6 * u, 5 * u);
+
+  // 3. 재킷/몸통 (남색) & 셔츠/넥타이
+  ctx.fillStyle = "#183b82";
+  ctx.fillRect(-4 * u, -17 * u, 8 * u, 10 * u);
+
+  // 하늘색 셔츠 트임
+  ctx.fillStyle = "#d4ecff";
+  ctx.fillRect(-1 * u, -17 * u, 4 * u, 8 * u);
+
+  // 빨간 넥타이
+  ctx.fillStyle = "#cc1b1b";
+  ctx.fillRect(0 * u, -15 * u, 2 * u, 6 * u);
+
+  // 4. 얼굴 (살구색)
+  ctx.fillStyle = "#fed7aa";
+  ctx.fillRect(-3 * u, -25 * u, 9 * u, 8 * u);
+
+  // 턱수염/하관 음영
+  ctx.fillStyle = "#e2b88b";
+  ctx.fillRect(-3 * u, -19 * u, 9 * u, 2 * u);
+
+  // 5. 둥근 뿔테 안경 (스크린샷 핵심)
+  ctx.fillStyle = "#111111";
+  // 안경 렌즈 테두리
+  ctx.fillRect(-1 * u, -24 * u, 4 * u, 4 * u);
+  ctx.fillRect(4 * u, -24 * u, 4 * u, 4 * u);
+  ctx.fillRect(3 * u, -23 * u, 2 * u, 2 * u); // 안경 브릿지
+  // 안경 알 투명 채우기
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0 * u, -23 * u, 2 * u, 2 * u);
+  ctx.fillRect(5 * u, -23 * u, 2 * u, 2 * u);
+
+  // 6. 갈색 왁스 헤어 (바람에 날리는 잔머리 포함)
+  ctx.fillStyle = "#542f13";
+  ctx.fillRect(-4 * u, -28 * u, 10 * u, 4 * u);
+  ctx.fillRect(-4 * u, -27 * u, 2 * u, 6 * u); // 구레나룻
+  // 삐친 머리카락 도트
+  ctx.fillRect(-6 * u, -27 * u, 2 * u, 2 * u);
+  ctx.fillRect(6 * u, -27 * u, 2 * u, 2 * u);
+  ctx.fillRect(1 * u, -30 * u, 3 * u, 2 * u);
+
+  ctx.restore();
+}
+
+// 스크린샷 상단 HUD: 금색 테두리 주황색 타임 바 & 레트로 점수 폰트
+function drawHUD() {
+  const barW = 280;
+  const barH = 20;
+  const barX = (canvas.width - barW) / 2;
+  const barY = 32;
+
+  // 외곽 황금색 프레임
+  ctx.fillStyle = "#8a5818";
+  ctx.fillRect(barX - 4, barY - 4, barW + 8, barH + 8);
+  ctx.fillStyle = "#ffd54f";
+  ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+
+  // 내부 어두운 홈
+  ctx.fillStyle = "#3e1c00";
+  ctx.fillRect(barX, barY, barW, barH);
+
+  // 채워지는 주황색 바
+  const fillW = Math.max(0, barW * energy);
+  ctx.fillStyle = "#e65100";
+  ctx.fillRect(barX, barY, fillW, barH);
+  // 바 상단 하이라이트 줄
+  ctx.fillStyle = "#ff9800";
+  ctx.fillRect(barX, barY, fillW, 4);
+
+  // 점수 텍스트 (스크린샷 중앙 숫자 스타일: 검은 외곽선 + 형광 연두색)
+  ctx.save();
+  ctx.font = "900 44px 'Courier New', Impact, monospace";
+  ctx.textAlign = "center";
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = "#000000";
+  ctx.strokeText(score, canvas.width / 2, 105);
+  ctx.fillStyle = "#76ff03";
+  ctx.fillText(score, canvas.width / 2, 105);
+  ctx.restore();
+
+  if (gameState === "READY") {
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#ffd54f";
+    ctx.font = "bold 26px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("INFINITE STAIRS", canvas.width / 2, canvas.height / 2 - 20);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "16px sans-serif";
+    ctx.fillText("SPACE 키를 눌러 시작", canvas.width / 2, canvas.height / 2 + 20);
+  } else if (gameState === "GAMEOVER") {
+    ctx.fillStyle = "rgba(0,0,0,0.75)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#ff3b30";
+    ctx.font = "900 38px Impact, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 30);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 20px monospace";
+    ctx.fillText(`SCORE: ${score}`, canvas.width / 2, canvas.height / 2 + 15);
+    ctx.fillStyle = "#fcd34d";
+    ctx.font = "14px sans-serif";
+    ctx.fillText("[SPACE] 또는 [R] 키로 재시작", canvas.width / 2, canvas.height / 2 + 55);
   }
 }
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 배경 스카이라인
-  ctx.fillStyle = "#090d16";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // 1. 밀림 배경
+  drawJungleBackground();
 
-  // 계단 렌더링
+  // 2. 스크린샷 텍스처 계단
+  const curStair = stairs[player.stepIndex || player.y];
   stairs.forEach((s, idx) => {
-    // 플레이어 카메라 기준 상대 좌표 산출
     const screenX = ANCHOR_X + (s.x * STAIR_W) - camX;
     const screenY = ANCHOR_Y - (s.y * STAIR_H) + camY;
 
-    // 화면 내부만 렌더링 최적화
-    if (screenY > -50 && screenY < canvas.height + 80) {
-      const isStepped = idx <= player.y;
-      drawStair(screenX, screenY, isStepped);
+    if (screenY > -60 && screenY < canvas.height + 60) {
+      drawStair(screenX, screenY);
     }
   });
 
-  // 플레이어 렌더링
+  // 3. 안경 쓴 직장인 캐릭터
   const pScreenX = ANCHOR_X + (player.x * STAIR_W) - camX;
   const pScreenY = ANCHOR_Y - (player.y * STAIR_H) + camY;
-  drawPlayer(pScreenX, pScreenY);
+  drawPixelCharacter(pScreenX, pScreenY);
 
-  // 파티클 렌더링
-  particles.forEach(p => {
-    ctx.save();
-    ctx.globalAlpha = p.life;
-    ctx.fillStyle = p.color;
-    ctx.fillRect(p.x, p.y, 4, 4);
-    ctx.restore();
-  });
-
-  // UI (에너지 바 및 스코어)
+  // 4. UI 및 게이지
   drawHUD();
 
   requestAnimationFrame(() => {
@@ -309,105 +456,6 @@ function draw() {
   });
 }
 
-function drawStair(x, y, passed) {
-  ctx.save();
-  const topColor = passed ? "#334155" : "#00f2fe";
-  const bodyColor = passed ? "#1e293b" : "#0284c7";
-
-  // 상단 발판
-  ctx.fillStyle = topColor;
-  ctx.fillRect(x - STAIR_W / 2, y, STAIR_W, 10);
-
-  // 계단 앞면 블록
-  ctx.fillStyle = bodyColor;
-  ctx.fillRect(x - STAIR_W / 2, y + 10, STAIR_W, STAIR_H - 10);
-
-  // 블록 외곽선
-  ctx.strokeStyle = passed ? "#475569" : "#bae6fd";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x - STAIR_W / 2, y, STAIR_W, STAIR_H);
-  ctx.restore();
-}
-
-function drawPlayer(x, y) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(player.dir, player.squash);
-
-  // 캐릭터 픽셀 드로잉 (비즈니스맨)
-  // 머리
-  ctx.fillStyle = "#ffedd5";
-  ctx.fillRect(-6, -42, 14, 12);
-
-  // 선글라스
-  ctx.fillStyle = "#0f172a";
-  ctx.fillRect(1, -38, 8, 4);
-
-  // 헤어
-  ctx.fillStyle = "#1e1b4b";
-  ctx.fillRect(-8, -46, 16, 6);
-
-  // 정장 상의 (붉은 재킷)
-  ctx.fillStyle = "#e11d48";
-  ctx.fillRect(-9, -30, 18, 16);
-
-  // 넥타이
-  ctx.fillStyle = "#38bdf8";
-  ctx.fillRect(0, -28, 4, 10);
-
-  // 바지 및 신발
-  ctx.fillStyle = "#0f172a";
-  ctx.fillRect(-8, -14, 7, 14);
-  ctx.fillRect(2, -14, 7, 14);
-
-  ctx.restore();
-}
-
-function drawHUD() {
-  // 타임 게이지
-  const bw = 260;
-  const bh = 14;
-  const bx = (canvas.width - bw) / 2;
-  const by = 40;
-
-  ctx.fillStyle = "rgba(15, 23, 42, 0.8)";
-  ctx.fillRect(bx - 3, by - 3, bw + 6, bh + 6);
-
-  const fillW = Math.max(0, bw * energy);
-  ctx.fillStyle = energy > 0.3 ? "#38bdf8" : "#f43f5e";
-  ctx.fillRect(bx, by, fillW, bh);
-
-  // 점수
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "900 42px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(score, canvas.width / 2, 110);
-
-  if (gameState === "READY") {
-    ctx.fillStyle = "rgba(0,0,0,0.7)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#38bdf8";
-    ctx.font = "bold 26px sans-serif";
-    ctx.fillText("INFINITE STAIRS", canvas.width / 2, canvas.height / 2 - 30);
-    ctx.fillStyle = "#e2e8f0";
-    ctx.font = "16px sans-serif";
-    ctx.fillText("[SPACE] 또는 [방향키]로 시작", canvas.width / 2, canvas.height / 2 + 15);
-  } else if (gameState === "GAMEOVER") {
-    ctx.fillStyle = "rgba(0,0,0,0.8)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#f43f5e";
-    ctx.font = "900 36px sans-serif";
-    ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 40);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "20px monospace";
-    ctx.fillText(`최종 점수: ${score}`, canvas.width / 2, canvas.height / 2 + 5);
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "14px sans-serif";
-    ctx.fillText("[SPACE] 또는 [R] 키로 재시작", canvas.width / 2, canvas.height / 2 + 45);
-  }
-}
-
-// 시작
 initGame();
 draw();
 </script>
