@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Cosmic Infinite Stairs - 비율 고정 & 전 이미지 투명화</title>
+  <title>Cosmic Infinite Stairs - 1.7배 크기 보정판</title>
   <style>
     * {
       box-sizing: border-box;
@@ -269,7 +269,6 @@
 
   <div id="character-roster"></div>
 
-  <!-- 설정 모달 -->
   <div id="settings-modal">
     <div class="modal-box">
       <div class="modal-title">키 매핑 설정</div>
@@ -293,7 +292,6 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Web Audio API
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function playBeep(freq, type = "sine", duration = 0.04) {
   if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -309,9 +307,6 @@ function playBeep(freq, type = "sine", duration = 0.04) {
   osc.stop(audioCtx.currentTime + duration);
 }
 
-// ==========================================
-// 모든 이미지 전역 크로마키(투명화) 파이프라인
-// ==========================================
 const rawImages = {
   sheet8: new Image(),
   among: new Image(),
@@ -319,7 +314,6 @@ const rawImages = {
   pixel2: new Image()
 };
 
-// 투명 처리 완료된 오프스크린 캔버스 캐시
 const processedCanvases = {
   sheet8: null,
   among: null,
@@ -338,7 +332,6 @@ function processChromaKey(img, key) {
     const imgData = octx.getImageData(0, 0, off.width, off.height);
     const d = imgData.data;
 
-    // 흰색 및 밝은 회색 계열(R,G,B > 235) 픽셀 완전 투명화
     for (let i = 0; i < d.length; i += 4) {
       if (d[i] > 235 && d[i + 1] > 235 && d[i + 2] > 235) {
         d[i + 3] = 0;
@@ -347,12 +340,10 @@ function processChromaKey(img, key) {
     octx.putImageData(imgData, 0, 0);
     processedCanvases[key] = off;
   } catch (err) {
-    // CORS 보안 제약 발생 시 원본 이미지 대체
     processedCanvases[key] = img;
   }
 }
 
-// 이미지별 로드 바인딩
 Object.keys(rawImages).forEach(key => {
   rawImages[key].onload = () => processChromaKey(rawImages[key], key);
 });
@@ -362,7 +353,6 @@ rawImages.among.src = "among.svg";
 rawImages.pixel1.src = "pixel1.svg";
 rawImages.pixel2.src = "pixel2.svg";
 
-// 계단 물리 규격
 const STAIR_W = 58;
 const STAIR_H = 30;
 const ANCHOR_X = canvas.width / 2;
@@ -385,7 +375,6 @@ const keyBindings = {
 };
 let listeningTarget = null;
 
-// 11종 전체 캐릭터 메타데이터
 const characters = [
   { id: "businessman", name: "비즈니스맨", sourceKey: "sheet8", grid: { col: 1, row: 2 } },
   { id: "boxer", name: "복서", sourceKey: "sheet8", grid: { col: 0, row: 1 } },
@@ -421,18 +410,15 @@ const spaceStars = Array.from({ length: 45 }, () => ({
   glowSpeed: Math.random() * 0.02 + 0.01
 }));
 
-// ==========================================
-// 비율 고정 축소 스프라이트 렌더러
-// ==========================================
 function drawPlayerSprite(x, y) {
   ctx.save();
   ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
   ctx.scale(player.dir * player.scaleX, player.scaleY);
 
-  // 캐릭터 발밑 그림자
+  // 캐릭터 발밑 그림자 (1.7배 크기 반영)
   ctx.fillStyle = "rgba(0, 242, 254, 0.25)";
   ctx.beginPath();
-  ctx.ellipse(0, -player.bounceY, 14, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, -player.bounceY, 20, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
   const char = characters.find(c => c.id === currentSelectedChar) || characters[0];
@@ -458,15 +444,15 @@ function drawPlayerSprite(x, y) {
       sw = totalW / 4;
       sh = totalH / 4;
       sx = (frame * 2 + 1) * sw;
-      sy = 2 * sh; // 측면 걷기 모션
+      sy = 2 * sh;
     } else if (char.sourceKey === "among") {
       sx = 0; sy = 0;
       sw = totalW; sh = totalH;
     }
 
-    // 캐릭터 비율(Aspect Ratio) 엄격 고정 축소 계산
-    const TARGET_MAX_H = 44; // 계단 높이에 맞춘 표준 캐릭터 세로 크기
-    const TARGET_MAX_W = 44;
+    // 1.7배 크기 보정 (44px * 1.7 ≈ 75px)
+    const TARGET_MAX_H = 75;
+    const TARGET_MAX_W = 75;
     const aspect = sw / sh;
 
     let drawW, drawH;
@@ -478,13 +464,11 @@ function drawPlayerSprite(x, y) {
       drawW = TARGET_MAX_H * aspect;
     }
 
-    // 발바닥(y=0) 기준 중심 정렬 렌더링
     ctx.drawImage(src, sx, sy, sw, sh, -drawW / 2, -drawH, drawW, drawH);
 
   } else {
-    // 로딩 대기 대체 박스
     ctx.fillStyle = "#00f2fe";
-    ctx.fillRect(-10, -32, 20, 32);
+    ctx.fillRect(-16, -50, 32, 50);
   }
 
   ctx.restore();
@@ -649,7 +633,7 @@ function step(isTurn) {
     energy = Math.min(MAX_ENERGY, energy + 0.13);
 
     player.animFrame = (player.animFrame + 1) % 2;
-    player.bounceY = -6;
+    player.bounceY = -7;
     player.scaleX = 0.92;
     player.scaleY = 1.12;
 
