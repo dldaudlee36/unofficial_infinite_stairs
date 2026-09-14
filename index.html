@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Cosmic Infinite Stairs</title>
+  <title>Cosmic Infinite Stairs - 생동감 애니메이션 판</title>
   <style>
     * {
       box-sizing: border-box;
@@ -36,8 +36,6 @@
       flex-direction: column;
       overflow: hidden;
     }
-
-    /* 캔버스와 분리된 독립 최상단 헤더 바 */
     #top-bar {
       height: 44px;
       background: #0d0926;
@@ -65,11 +63,8 @@
       padding: 4px 10px;
       cursor: pointer;
       box-shadow: 0 2px 8px rgba(0, 242, 254, 0.2);
-      transition: all 0.15s ease;
     }
-    #swap-toggle-btn:active {
-      transform: scale(0.95);
-    }
+    #swap-toggle-btn:active { transform: scale(0.95); }
 
     #canvas-wrap {
       flex: 1;
@@ -180,7 +175,6 @@
 <body>
 
 <div id="mobile-frame">
-  <!-- 독립 상단 헤더 -->
   <div id="top-bar">
     <div class="app-title">Cosmic Stairs</div>
     <button id="swap-toggle-btn">🔄 키 반전: OFF</button>
@@ -199,6 +193,7 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
+// 오디오 엔진
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function playBeep(freq, type = "sine", duration = 0.04) {
   if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -239,12 +234,15 @@ const characters = [
 ];
 let currentSelectedChar = "businessman";
 
+// 플레이어 물리 및 애니메이션 상태
 const player = {
   x: 0,
   y: 0,
   dir: 1,
   scaleX: 1,
-  scaleY: 1
+  scaleY: 1,
+  bounceY: 0,
+  animFrame: 0 // 0 또는 1 (발걸음 교차 프레임)
 };
 
 let stairs = [];
@@ -257,18 +255,21 @@ const spaceStars = Array.from({ length: 45 }, () => ({
   glowSpeed: Math.random() * 0.02 + 0.01
 }));
 
+// ==========================================
+// 2단계 생동감 보행 프레임 매트릭스 (Frame 0 & Frame 1)
+// ==========================================
 const PALETTES = {
   boxer: {
     '.': null,
-    'K': '#111827',
-    'H': '#dc2626',
-    'S': '#f5af76',
-    'D': '#d97706',
-    'E': '#ffffff',
-    'R': '#ef4444',
-    'B': '#1d4ed8',
-    'G': '#facc15',
-    'W': '#e2e8f0'
+    'K': '#111827', // 외곽선
+    'H': '#dc2626', // 헤어밴드
+    'S': '#f5af76', // 피부
+    'D': '#d97706', // 피부 음영
+    'E': '#ffffff', // 하이라이트
+    'R': '#ef4444', // 글러브
+    'B': '#1d4ed8', // 트렁크
+    'G': '#facc15', // 벨트
+    'W': '#e2e8f0'  // 복싱화
   },
   businessman: {
     '.': null,
@@ -291,58 +292,114 @@ const PALETTES = {
   }
 };
 
-const SPRITE_MAPS = {
+const ANIM_SPRITES = {
   boxer: [
-    "..KKKKKK......",
-    ".KHHHHHHK.....",
-    ".KSSSSSSK.....",
-    ".KSEKSEKK.....",
-    ".KSSSSSSK.....",
-    ".KDDSSSDK.....",
-    ".RRSSSSRR.....",
-    "RRRSSSSRRR....",
-    "RRRGGGGGRR....",
-    ".RRBBBBBRR....",
-    "..KBBBBBK.....",
-    "..KBBBBBK.....",
-    "..KSS.SSK.....",
-    "..KSS.SSK.....",
-    "..WWW.WWW....."
+    // 프레임 0 (오른손 잽 & 앞발 딛기)
+    [
+      "..KKKKKK......",
+      ".KHHHHHHK.....",
+      ".KSSSSSSK.....",
+      ".KSEKSEKK.....",
+      ".KSSSSSSK.....",
+      ".KDDSSSDK.....",
+      ".RRSSSSRR.....",
+      "RRRSSSSRRR....",
+      "RRRGGGGGRR....",
+      ".RRBBBBBRR....",
+      "..KBBBBBK.....",
+      "..KBBBBBK.....",
+      "..KSS.SSK.....",
+      "..WWW.KKK.....",
+      "......WWW....."
+    ],
+    // 프레임 1 (왼손 가드 & 뒷발 도약)
+    [
+      "..KKKKKK......",
+      ".KHHHHHHK.....",
+      ".KSSSSSSK.....",
+      ".KSEKSEKK.....",
+      ".KSSSSSSK.....",
+      ".KDDSSSDK.....",
+      "..RSSSSRRR....",
+      ".RRSSSSRRR....",
+      "..RGGGGGR.....",
+      "..KBBBBBK.....",
+      "..KBBBBBK.....",
+      "..KSS.SSK.....",
+      "..KKK.SSK.....",
+      "..WWW.WWW.....",
+      ".............."
+    ]
   ],
   businessman: [
-    "..HHHHHH......",
-    ".HHHHHHHH.....",
-    ".KSSSSSSK.....",
-    ".KKKKKKKK.....",
-    ".KSSSSSSK.....",
-    ".KJJJJJJK.....",
-    "KJJTTJJJJK....",
-    "KJJTTJJJJK....",
-    ".KJJJJJJK.....",
-    "..KCCCCK......",
-    "..KCCCCK......",
-    "..KCCCCK......",
-    "..KCC.CK......",
-    "..KKK.KKK....."
+    [
+      "..HHHHHH......",
+      ".HHHHHHHH.....",
+      ".KSSSSSSK.....",
+      ".KKKKKKKK.....",
+      ".KSSSSSSK.....",
+      ".KJJJJJJK.....",
+      "KJJTTJJJJK....",
+      "KJJTTJJJJK....",
+      ".KJJJJJJK.....",
+      "..KCCCCK......",
+      "..KCCCCK......",
+      "..KCCCCK......",
+      "..KCC.CK......",
+      "..KKK.KKK....."
+    ],
+    [
+      "..HHHHHH......",
+      ".HHHHHHHH.....",
+      ".KSSSSSSK.....",
+      ".KKKKKKKK.....",
+      ".KSSSSSSK.....",
+      ".KJJJJJJK.....",
+      ".JJTTJJJJ.....",
+      "KJJTTJJJJK....",
+      ".KJJJJJJK.....",
+      "..KCCCCK......",
+      "..KCC.CK......",
+      "..KCC.CK......",
+      "..KKK.KKK.....",
+      "......KKK....."
+    ]
   ],
   dracula: [
-    "..KKKKKK......",
-    ".KKKKKKKK.....",
-    ".KSSSSSSK.....",
-    ".KSRKSRKK.....",
-    ".KSSWSSSK.....",
-    "MKMMWMMKMR....",
-    "MKMMWMMKMR....",
-    "MKMMMMMKMR....",
-    ".KMMMMMK......",
-    "..KMMMMK......",
-    "..KMM.MK......",
-    "..KKK.KKK....."
+    [
+      "..KKKKKK......",
+      ".KKKKKKKK.....",
+      ".KSSSSSSK.....",
+      ".KSRKSRKK.....",
+      ".KSSWSSSK.....",
+      "MKMMWMMKMR....",
+      "MKMMWMMKMR....",
+      "MKMMMMMKMR....",
+      ".KMMMMMK......",
+      "..KMMMMK......",
+      "..KMM.MK......",
+      "..KKK.KKK....."
+    ],
+    [
+      "..KKKKKK......",
+      ".KKKKKKKK.....",
+      ".KSSSSSSK.....",
+      ".KSRKSRKK.....",
+      ".KSSWSSSK.....",
+      "MKMMWMMKMR....",
+      "MMMMWMMMMR....",
+      "KKMMMMMKMR....",
+      ".KMMMMMK......",
+      "..KMMMMK......",
+      "..KMM.MK......",
+      "..KKK...KK...."
+    ]
   ]
 };
 
-function drawPixelMatrix(charKey, x, y, scale = 2.4) {
-  const map = SPRITE_MAPS[charKey] || SPRITE_MAPS.businessman;
+function drawAnimatedPixelMatrix(charKey, frameIdx, scale = 2.4) {
+  const frames = ANIM_SPRITES[charKey] || ANIM_SPRITES.businessman;
+  const map = frames[frameIdx % frames.length];
   const palette = PALETTES[charKey] || PALETTES.businessman;
 
   const rows = map.length;
@@ -352,8 +409,8 @@ function drawPixelMatrix(charKey, x, y, scale = 2.4) {
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const pixelCode = map[r][c];
-      const color = palette[pixelCode];
+      const code = map[r][c];
+      const color = palette[code];
       if (color) {
         ctx.fillStyle = color;
         ctx.fillRect(startX + c * scale, startY + r * scale, scale, scale);
@@ -380,11 +437,7 @@ function renderControls() {
     </button>
   `;
 
-  if (!isSwapped) {
-    controller.innerHTML = turnBtnHTML + climbBtnHTML;
-  } else {
-    controller.innerHTML = climbBtnHTML + turnBtnHTML;
-  }
+  controller.innerHTML = !isSwapped ? (turnBtnHTML + climbBtnHTML) : (climbBtnHTML + turnBtnHTML);
 
   const turnBtn = document.getElementById("btn-turn");
   const climbBtn = document.getElementById("btn-climb");
@@ -479,6 +532,8 @@ function initGame() {
   player.dir = 1;
   player.scaleX = 1;
   player.scaleY = 1;
+  player.bounceY = 0;
+  player.animFrame = 0;
 
   camX = 0;
   camY = 0;
@@ -521,8 +576,11 @@ function step(isTurn) {
     }
     energy = Math.min(MAX_ENERGY, energy + 0.13);
 
-    player.scaleX = 1.2;
-    player.scaleY = 0.8;
+    // 생동감 연출: 2단계 보행 프레임 스위칭 및 도약 바운스
+    player.animFrame = (player.animFrame + 1) % 2;
+    player.bounceY = -7; 
+    player.scaleX = 0.88;
+    player.scaleY = 1.18;
 
     targetCamX = player.x * STAIR_W;
     targetCamY = player.y * STAIR_H;
@@ -575,8 +633,10 @@ function update() {
   camX += (targetCamX - camX) * 0.35;
   camY += (targetCamY - camY) * 0.35;
 
-  player.scaleX += (1 - player.scaleX) * 0.2;
-  player.scaleY += (1 - player.scaleY) * 0.2;
+  // 바운스 및 탄성 복원
+  player.bounceY += (0 - player.bounceY) * 0.28;
+  player.scaleX += (1 - player.scaleX) * 0.22;
+  player.scaleY += (1 - player.scaleY) * 0.22;
 }
 
 function drawCosmicBackground() {
@@ -617,15 +677,18 @@ function drawNeonStair(x, y, isCurrent) {
 
 function drawPlayer(x, y) {
   ctx.save();
-  ctx.translate(Math.floor(x), Math.floor(y));
+  // 바운스 오프셋 적용
+  ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
   ctx.scale(player.dir * player.scaleX, player.scaleY);
 
+  // 캐릭터 그림자
   ctx.fillStyle = "rgba(0, 242, 254, 0.25)";
   ctx.beginPath();
-  ctx.ellipse(0, 0, 16, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, -player.bounceY, 16, 4, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  drawPixelMatrix(currentSelectedChar, 0, 0, 2.5);
+  // 2프레임 애니메이션 도트 매트릭스 렌더링
+  drawAnimatedPixelMatrix(currentSelectedChar, player.animFrame, 2.5);
   ctx.restore();
 }
 
