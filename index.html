@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Cosmic Infinite Stairs - 생동감 애니메이션 판</title>
+  <title>Cosmic Infinite Stairs - 11종 캐릭터 & 커스텀 키 설정</title>
   <style>
     * {
       box-sizing: border-box;
@@ -36,8 +36,9 @@
       flex-direction: column;
       overflow: hidden;
     }
+    /* 상단 헤더 */
     #top-bar {
-      height: 44px;
+      height: 46px;
       background: #0d0926;
       border-bottom: 1px solid #231647;
       display: flex;
@@ -47,24 +48,27 @@
       z-index: 20;
     }
     .app-title {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 900;
       letter-spacing: 1px;
-      color: #7928ca;
+      color: #a855f7;
       text-transform: uppercase;
     }
-    #swap-toggle-btn {
+    #settings-btn {
       background: #161038;
-      border: 1px solid #00f2fe;
-      border-radius: 14px;
+      border: 1px solid #7928ca;
+      border-radius: 8px;
       color: #00f2fe;
-      font-size: 11px;
-      font-weight: bold;
-      padding: 4px 10px;
+      font-size: 16px;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       cursor: pointer;
       box-shadow: 0 2px 8px rgba(0, 242, 254, 0.2);
     }
-    #swap-toggle-btn:active { transform: scale(0.95); }
+    #settings-btn:active { transform: scale(0.92); }
 
     #canvas-wrap {
       flex: 1;
@@ -78,6 +82,7 @@
       image-rendering: pixelated;
     }
 
+    /* 하단 조작 컨트롤러 */
     #touch-controller {
       height: 95px;
       background: rgba(10, 7, 26, 0.95);
@@ -117,11 +122,13 @@
       color: #fff;
     }
     .game-btn span.sub-key {
-      font-size: 10px;
-      opacity: 0.6;
+      font-size: 11px;
+      opacity: 0.7;
       margin-top: 2px;
+      color: #facc15;
     }
 
+    /* 11종 캐릭터 캐러셀 */
     #character-roster {
       height: 95px;
       background: #05030f;
@@ -156,19 +163,89 @@
     }
     .char-card.locked {
       filter: grayscale(1);
-      opacity: 0.5;
+      opacity: 0.45;
       cursor: not-allowed;
     }
     .char-card .card-name {
       font-size: 11px;
       font-weight: bold;
       margin-top: 4px;
+      text-align: center;
     }
     .char-card .card-condition {
       font-size: 8px;
       color: #f43f5e;
       text-align: center;
       margin-top: 2px;
+    }
+
+    /* 커스텀 키 설정 모달 */
+    #settings-modal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(4, 2, 15, 0.88);
+      backdrop-filter: blur(4px);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+    .modal-box {
+      width: 90%;
+      background: #120e2e;
+      border: 2px solid #7928ca;
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 0 30px rgba(121, 40, 202, 0.4);
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #00f2fe;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .key-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      font-size: 14px;
+    }
+    .key-assign-btn {
+      background: #1f1847;
+      border: 1px solid #3b82f6;
+      color: #facc15;
+      font-size: 13px;
+      font-weight: bold;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      min-width: 80px;
+      text-align: center;
+    }
+    .key-assign-btn.listening {
+      border-color: #ff007f;
+      background: #3b0724;
+      color: #ff007f;
+      animation: blink 0.8s infinite;
+    }
+    @keyframes blink { 50% { opacity: 0.5; } }
+    .modal-close-btn {
+      width: 100%;
+      background: #00f2fe;
+      border: none;
+      color: #05030e;
+      font-weight: 800;
+      padding: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 10px;
     }
   </style>
 </head>
@@ -177,23 +254,51 @@
 <div id="mobile-frame">
   <div id="top-bar">
     <div class="app-title">Cosmic Stairs</div>
-    <button id="swap-toggle-btn">🔄 키 반전: OFF</button>
+    <button id="settings-btn">⚙️</button>
   </div>
 
   <div id="canvas-wrap">
     <canvas id="gameCanvas" width="400" height="560"></canvas>
   </div>
   
-  <div id="touch-controller"></div>
+  <div id="touch-controller">
+    <button class="game-btn turn-btn" id="btn-turn">
+      방향 전환
+      <span class="sub-key" id="turn-key-label"></span>
+    </button>
+    <button class="game-btn" id="btn-climb">
+      오르기
+      <span class="sub-key" id="climb-key-label"></span>
+    </button>
+  </div>
 
   <div id="character-roster"></div>
+
+  <!-- 설정 모달 -->
+  <div id="settings-modal">
+    <div class="modal-box">
+      <div class="modal-title">키 매핑 설정</div>
+      <div class="key-row">
+        <span>방향 전환 키:</span>
+        <button class="key-assign-btn" id="bind-turn-btn"></button>
+      </div>
+      <div class="key-row">
+        <span>오르기 키:</span>
+        <button class="key-assign-btn" id="bind-climb-btn"></button>
+      </div>
+      <div style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 8px;">
+        버튼을 누르고 변경할 키를 입력하세요.
+      </div>
+      <button class="modal-close-btn" id="close-modal-btn">설정 완료</button>
+    </div>
+  </div>
 </div>
 
 <script>
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// 오디오 엔진
+// Web Audio API
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function playBeep(freq, type = "sine", duration = 0.04) {
   if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -209,6 +314,19 @@ function playBeep(freq, type = "sine", duration = 0.04) {
   osc.stop(audioCtx.currentTime + duration);
 }
 
+// 이미지 리소스 로더
+const images = {
+  sheet8: new Image(),
+  amongUs: new Image(),
+  charVec: new Image(),
+  spriteSheet: new Image()
+};
+images.sheet8.src = "Gemini_Generated_Image_dr7ceydr7ceydr7c.png";
+images.amongUs.src = "among-us.svg";
+images.charVec.src = "Charactervector.svg";
+images.spriteSheet.src = "SpriteSheet.svg";
+
+// 계단 및 물리 규격
 const STAIR_W = 58;
 const STAIR_H = 30;
 const ANCHOR_X = canvas.width / 2;
@@ -225,16 +343,29 @@ let camY = 0;
 let targetCamX = 0;
 let targetCamY = 0;
 
-let isSwapped = false;
+// 커스텀 키 설정 상태
+const keyBindings = {
+  turn: { code: "KeyZ", label: "Z" },
+  climb: { code: "KeyX", label: "X" }
+};
+let listeningTarget = null; // 'turn' 또는 'climb'
 
+// 11종 전체 캐릭터 메타데이터 & 시트 크롭 좌표 매핑
 const characters = [
-  { id: "businessman", name: "비즈니스맨", reqScore: 0, unlocked: true, desc: "기본 제공" },
-  { id: "boxer", name: "복서", reqScore: 20, unlocked: false, desc: "20계단 달성" },
-  { id: "dracula", name: "드라큘라", reqScore: 50, unlocked: false, desc: "50계단 달성" }
+  { id: "businessman", name: "비즈니스맨", reqScore: 0, unlocked: true, type: "sheet8", grid: { col: 1, row: 2 } },
+  { id: "boxer", name: "복서", reqScore: 10, unlocked: false, type: "sheet8", grid: { col: 0, row: 1 } },
+  { id: "dracula", name: "드라큘라", reqScore: 20, unlocked: false, type: "sheet8", grid: { col: 0, row: 3 } },
+  { id: "delivery", name: "택배기사", reqScore: 30, unlocked: false, type: "sheet8", grid: { col: 1, row: 3 } },
+  { id: "sheriff", name: "보안관", reqScore: 40, unlocked: false, type: "sheet8", grid: { col: 1, row: 1 } },
+  { id: "tennis", name: "테니스선수", reqScore: 50, unlocked: false, type: "sheet8", grid: { col: 0, row: 2 } },
+  { id: "soldier", name: "근위병", reqScore: 60, unlocked: false, type: "sheet8", grid: { col: 0, row: 0 } },
+  { id: "bunny", name: "바니걸", reqScore: 70, unlocked: false, type: "sheet8", grid: { col: 1, row: 0 } },
+  { id: "among", name: "어몽어스", reqScore: 80, unlocked: false, type: "among" },
+  { id: "redboy", name: "빨간티소년", reqScore: 90, unlocked: false, type: "charVec" },
+  { id: "redhair", name: "붉은머리소년", reqScore: 100, unlocked: false, type: "spriteSheet" }
 ];
 let currentSelectedChar = "businessman";
 
-// 플레이어 물리 및 애니메이션 상태
 const player = {
   x: 0,
   y: 0,
@@ -242,7 +373,7 @@ const player = {
   scaleX: 1,
   scaleY: 1,
   bounceY: 0,
-  animFrame: 0 // 0 또는 1 (발걸음 교차 프레임)
+  animFrame: 0
 };
 
 let stairs = [];
@@ -255,220 +386,130 @@ const spaceStars = Array.from({ length: 45 }, () => ({
   glowSpeed: Math.random() * 0.02 + 0.01
 }));
 
-// ==========================================
-// 2단계 생동감 보행 프레임 매트릭스 (Frame 0 & Frame 1)
-// ==========================================
-const PALETTES = {
-  boxer: {
-    '.': null,
-    'K': '#111827', // 외곽선
-    'H': '#dc2626', // 헤어밴드
-    'S': '#f5af76', // 피부
-    'D': '#d97706', // 피부 음영
-    'E': '#ffffff', // 하이라이트
-    'R': '#ef4444', // 글러브
-    'B': '#1d4ed8', // 트렁크
-    'G': '#facc15', // 벨트
-    'W': '#e2e8f0'  // 복싱화
-  },
-  businessman: {
-    '.': null,
-    'K': '#0f172a',
-    'H': '#451a03',
-    'S': '#fed7aa',
-    'C': '#1e293b',
-    'J': '#334155',
-    'T': '#00f2fe',
-    'W': '#ffffff'
-  },
-  dracula: {
-    '.': null,
-    'K': '#09090b',
-    'S': '#f1f5f9',
-    'R': '#dc2626',
-    'M': '#18181b',
-    'W': '#ffffff',
-    'P': '#7c3aed'
-  }
-};
+// 캐릭터 렌더러
+function drawPlayerSprite(x, y) {
+  ctx.save();
+  ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
+  ctx.scale(player.dir * player.scaleX, player.scaleY);
 
-const ANIM_SPRITES = {
-  boxer: [
-    // 프레임 0 (오른손 잽 & 앞발 딛기)
-    [
-      "..KKKKKK......",
-      ".KHHHHHHK.....",
-      ".KSSSSSSK.....",
-      ".KSEKSEKK.....",
-      ".KSSSSSSK.....",
-      ".KDDSSSDK.....",
-      ".RRSSSSRR.....",
-      "RRRSSSSRRR....",
-      "RRRGGGGGRR....",
-      ".RRBBBBBRR....",
-      "..KBBBBBK.....",
-      "..KBBBBBK.....",
-      "..KSS.SSK.....",
-      "..WWW.KKK.....",
-      "......WWW....."
-    ],
-    // 프레임 1 (왼손 가드 & 뒷발 도약)
-    [
-      "..KKKKKK......",
-      ".KHHHHHHK.....",
-      ".KSSSSSSK.....",
-      ".KSEKSEKK.....",
-      ".KSSSSSSK.....",
-      ".KDDSSSDK.....",
-      "..RSSSSRRR....",
-      ".RRSSSSRRR....",
-      "..RGGGGGR.....",
-      "..KBBBBBK.....",
-      "..KBBBBBK.....",
-      "..KSS.SSK.....",
-      "..KKK.SSK.....",
-      "..WWW.WWW.....",
-      ".............."
-    ]
-  ],
-  businessman: [
-    [
-      "..HHHHHH......",
-      ".HHHHHHHH.....",
-      ".KSSSSSSK.....",
-      ".KKKKKKKK.....",
-      ".KSSSSSSK.....",
-      ".KJJJJJJK.....",
-      "KJJTTJJJJK....",
-      "KJJTTJJJJK....",
-      ".KJJJJJJK.....",
-      "..KCCCCK......",
-      "..KCCCCK......",
-      "..KCCCCK......",
-      "..KCC.CK......",
-      "..KKK.KKK....."
-    ],
-    [
-      "..HHHHHH......",
-      ".HHHHHHHH.....",
-      ".KSSSSSSK.....",
-      ".KKKKKKKK.....",
-      ".KSSSSSSK.....",
-      ".KJJJJJJK.....",
-      ".JJTTJJJJ.....",
-      "KJJTTJJJJK....",
-      ".KJJJJJJK.....",
-      "..KCCCCK......",
-      "..KCC.CK......",
-      "..KCC.CK......",
-      "..KKK.KKK.....",
-      "......KKK....."
-    ]
-  ],
-  dracula: [
-    [
-      "..KKKKKK......",
-      ".KKKKKKKK.....",
-      ".KSSSSSSK.....",
-      ".KSRKSRKK.....",
-      ".KSSWSSSK.....",
-      "MKMMWMMKMR....",
-      "MKMMWMMKMR....",
-      "MKMMMMMKMR....",
-      ".KMMMMMK......",
-      "..KMMMMK......",
-      "..KMM.MK......",
-      "..KKK.KKK....."
-    ],
-    [
-      "..KKKKKK......",
-      ".KKKKKKKK.....",
-      ".KSSSSSSK.....",
-      ".KSRKSRKK.....",
-      ".KSSWSSSK.....",
-      "MKMMWMMKMR....",
-      "MMMMWMMMMR....",
-      "KKMMMMMKMR....",
-      ".KMMMMMK......",
-      "..KMMMMK......",
-      "..KMM.MK......",
-      "..KKK...KK...."
-    ]
-  ]
-};
+  ctx.fillStyle = "rgba(0, 242, 254, 0.25)";
+  ctx.beginPath();
+  ctx.ellipse(0, -player.bounceY, 16, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
 
-function drawAnimatedPixelMatrix(charKey, frameIdx, scale = 2.4) {
-  const frames = ANIM_SPRITES[charKey] || ANIM_SPRITES.businessman;
-  const map = frames[frameIdx % frames.length];
-  const palette = PALETTES[charKey] || PALETTES.businessman;
+  const char = characters.find(c => c.id === currentSelectedChar) || characters[0];
+  const frame = player.animFrame % 2;
 
-  const rows = map.length;
-  const cols = map[0].length;
-  const startX = -Math.floor((cols * scale) / 2);
-  const startY = -Math.floor(rows * scale);
+  if (char.type === "sheet8" && images.sheet8.complete && images.sheet8.naturalWidth > 0) {
+    const W = images.sheet8.naturalWidth;
+    const H = images.sheet8.naturalHeight;
+    const blockW = W / 2;
+    const blockH = H / 4;
+    const cellW = blockW / 4;
+    const cellH = blockH / 2;
 
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const code = map[r][c];
-      const color = palette[code];
-      if (color) {
-        ctx.fillStyle = color;
-        ctx.fillRect(startX + c * scale, startY + r * scale, scale, scale);
-      }
+    const blockX = char.grid.col * blockW;
+    const blockY = char.grid.row * blockH;
+
+    // 측면 걷기 모션 프레임 (열 1과 열 3 교차)
+    const sx = blockX + (frame === 0 ? cellW * 1 : cellW * 3);
+    const sy = blockY;
+
+    const drawSize = 46;
+    ctx.drawImage(images.sheet8, sx, sy, cellW, cellH, -drawSize / 2, -drawSize, drawSize, drawSize);
+
+  } else if (char.type === "among" && images.amongUs.complete) {
+    const drawW = 38;
+    const drawH = 46;
+    ctx.drawImage(images.amongUs, -drawW / 2, -drawH, drawW, drawH);
+
+  } else if ((char.type === "charVec" || char.type === "spriteSheet")) {
+    const img = char.type === "charVec" ? images.charVec : images.spriteSheet;
+    if (img.complete && img.naturalWidth > 0) {
+      const W = img.naturalWidth;
+      const H = img.naturalHeight;
+      const cellW = W / 4;
+      const cellH = H / 4;
+      const sx = (frame * 2 + 1) * cellW;
+      const sy = 2 * cellH; // 3행: 측면 걷기
+
+      const drawSize = 40;
+      ctx.drawImage(img, sx, sy, cellW, cellH, -drawSize / 2, -drawSize, drawSize, drawSize);
     }
+  } else {
+    // 대체 임시 박스
+    ctx.fillStyle = "#00f2fe";
+    ctx.fillRect(-12, -36, 24, 36);
   }
+
+  ctx.restore();
 }
 
-function renderControls() {
-  const controller = document.getElementById("touch-controller");
-  controller.innerHTML = "";
-
-  const turnBtnHTML = `
-    <button class="game-btn turn-btn" id="btn-turn">
-      방향 전환
-      <span class="sub-key">${!isSwapped ? '[Z] / [←]' : '[X] / [↑]'}</span>
-    </button>
-  `;
-
-  const climbBtnHTML = `
-    <button class="game-btn" id="btn-climb">
-      오르기
-      <span class="sub-key">${!isSwapped ? '[X] / [↑]' : '[Z] / [←]'}</span>
-    </button>
-  `;
-
-  controller.innerHTML = !isSwapped ? (turnBtnHTML + climbBtnHTML) : (climbBtnHTML + turnBtnHTML);
-
-  const turnBtn = document.getElementById("btn-turn");
-  const climbBtn = document.getElementById("btn-climb");
-
-  const bind = (btn, isTurn) => {
-    const trigger = (e) => {
-      e.preventDefault();
-      if (gameState === "GAMEOVER") {
-        initGame();
-        gameState = "PLAY";
-        return;
-      }
-      step(isTurn);
-    };
-    btn.addEventListener("touchstart", trigger, { passive: false });
-    btn.addEventListener("mousedown", trigger);
-  };
-
-  bind(turnBtn, true);
-  bind(climbBtn, false);
+function updateKeyLabels() {
+  document.getElementById("turn-key-label").innerText = `[${keyBindings.turn.label}]`;
+  document.getElementById("climb-key-label").innerText = `[${keyBindings.climb.label}]`;
+  document.getElementById("bind-turn-btn").innerText = keyBindings.turn.label;
+  document.getElementById("bind-climb-btn").innerText = keyBindings.climb.label;
 }
 
-const swapToggleBtn = document.getElementById("swap-toggle-btn");
-swapToggleBtn.addEventListener("click", () => {
-  isSwapped = !isSwapped;
-  swapToggleBtn.innerText = isSwapped ? "🔄 키 반전: ON" : "🔄 키 반전: OFF";
-  swapToggleBtn.style.borderColor = isSwapped ? "#ff007f" : "#00f2fe";
-  swapToggleBtn.style.color = isSwapped ? "#ff007f" : "#00f2fe";
-  renderControls();
+// 모달 및 키 바인딩 컨트롤러
+const settingsBtn = document.getElementById("settings-btn");
+const settingsModal = document.getElementById("settings-modal");
+const closeModalBtn = document.getElementById("close-modal-btn");
+const bindTurnBtn = document.getElementById("bind-turn-btn");
+const bindClimbBtn = document.getElementById("bind-climb-btn");
+
+settingsBtn.addEventListener("click", () => {
+  settingsModal.style.display = "flex";
+});
+closeModalBtn.addEventListener("click", () => {
+  settingsModal.style.display = "none";
+  listeningTarget = null;
+  bindTurnBtn.classList.remove("listening");
+  bindClimbBtn.classList.remove("listening");
 });
 
+bindTurnBtn.addEventListener("click", () => {
+  listeningTarget = "turn";
+  bindTurnBtn.classList.add("listening");
+  bindClimbBtn.classList.remove("listening");
+  bindTurnBtn.innerText = "키 입력...";
+});
+
+bindClimbBtn.addEventListener("click", () => {
+  listeningTarget = "climb";
+  bindClimbBtn.classList.add("listening");
+  bindTurnBtn.classList.remove("listening");
+  bindClimbBtn.innerText = "키 입력...";
+});
+
+window.addEventListener("keydown", (e) => {
+  if (listeningTarget) {
+    e.preventDefault();
+    const cleanLabel = e.key === " " ? "SPACE" : (e.key.length === 1 ? e.key.toUpperCase() : e.code.replace("Key", "").replace("Arrow", ""));
+    keyBindings[listeningTarget] = { code: e.code, label: cleanLabel };
+    listeningTarget = null;
+    bindTurnBtn.classList.remove("listening");
+    bindClimbBtn.classList.remove("listening");
+    updateKeyLabels();
+    return;
+  }
+
+  if (e.repeat) return;
+  if (e.code === "Space" && gameState === "GAMEOVER") {
+    initGame();
+    gameState = "PLAY";
+    return;
+  }
+
+  if (e.code === keyBindings.turn.code || e.key === "ArrowLeft") {
+    step(true);
+  } else if (e.code === keyBindings.climb.code || e.key === "ArrowUp") {
+    step(false);
+  }
+});
+
+// 캐릭터 캐러셀 UI
 function renderCharacterRoster() {
   const roster = document.getElementById("character-roster");
   roster.innerHTML = "";
@@ -477,14 +518,10 @@ function renderCharacterRoster() {
     const card = document.createElement("div");
     card.className = `char-card ${ch.id === currentSelectedChar ? 'selected' : ''} ${!ch.unlocked ? 'locked' : ''}`;
     
-    let emoji = "💼";
-    if (ch.id === "boxer") emoji = "🥊";
-    if (ch.id === "dracula") emoji = "🧛";
-
     card.innerHTML = `
-      <div style="font-size: 20px;">${emoji}</div>
+      <div style="font-size: 18px;">${getCharIcon(ch.id)}</div>
       <div class="card-name">${ch.name}</div>
-      <div class="card-condition">${ch.unlocked ? '선택 가능' : ch.desc}</div>
+      <div class="card-condition">${ch.unlocked ? '선택 가능' : ch.reqScore + '점 해금'}</div>
     `;
 
     card.addEventListener("click", () => {
@@ -495,6 +532,15 @@ function renderCharacterRoster() {
 
     roster.appendChild(card);
   });
+}
+
+function getCharIcon(id) {
+  const map = {
+    businessman: "💼", boxer: "🥊", dracula: "🧛", delivery: "📦",
+    sheriff: "🤠", tennis: "🎾", soldier: "💂", bunny: "🐰",
+    among: "🚀", redboy: "👦", redhair: "🧑"
+  };
+  return map[id] || "👤";
 }
 
 function checkUnlocks() {
@@ -545,13 +591,8 @@ function appendNextStair() {
   const last = stairs[stairs.length - 1];
   const prev = stairs[stairs.length - 2];
   let curDir = last.x - prev.x;
-
   if (Math.random() < 0.36) curDir = -curDir;
-
-  stairs.push({
-    x: last.x + curDir,
-    y: last.y + 1
-  });
+  stairs.push({ x: last.x + curDir, y: last.y + 1 });
 }
 
 function step(isTurn) {
@@ -576,11 +617,10 @@ function step(isTurn) {
     }
     energy = Math.min(MAX_ENERGY, energy + 0.13);
 
-    // 생동감 연출: 2단계 보행 프레임 스위칭 및 도약 바운스
     player.animFrame = (player.animFrame + 1) % 2;
-    player.bounceY = -7; 
-    player.scaleX = 0.88;
-    player.scaleY = 1.18;
+    player.bounceY = -7;
+    player.scaleX = 0.9;
+    player.scaleY = 1.15;
 
     targetCamX = player.x * STAIR_W;
     targetCamY = player.y * STAIR_H;
@@ -600,25 +640,24 @@ function gameOver() {
   checkUnlocks();
 }
 
-window.addEventListener("keydown", (e) => {
-  if (e.repeat) return;
-  if (e.code === "Space" && gameState === "GAMEOVER") {
-    initGame();
-    gameState = "PLAY";
-    return;
-  }
-
-  const isLeft = (e.key === "z" || e.key === "Z" || e.key === "ArrowLeft");
-  const isRight = (e.key === "x" || e.key === "X" || e.key === "ArrowUp");
-
-  if (!isSwapped) {
-    if (isLeft) step(true);
-    else if (isRight) step(false);
-  } else {
-    if (isLeft) step(false);
-    else if (isRight) step(true);
-  }
-});
+// 터치 버튼 바인딩
+const turnBtn = document.getElementById("btn-turn");
+const climbBtn = document.getElementById("btn-climb");
+const bindTouch = (btn, isTurn) => {
+  const trigger = (e) => {
+    e.preventDefault();
+    if (gameState === "GAMEOVER") {
+      initGame();
+      gameState = "PLAY";
+      return;
+    }
+    step(isTurn);
+  };
+  btn.addEventListener("touchstart", trigger, { passive: false });
+  btn.addEventListener("mousedown", trigger);
+};
+bindTouch(turnBtn, true);
+bindTouch(climbBtn, false);
 
 function update() {
   if (gameState === "PLAY") {
@@ -633,7 +672,6 @@ function update() {
   camX += (targetCamX - camX) * 0.35;
   camY += (targetCamY - camY) * 0.35;
 
-  // 바운스 및 탄성 복원
   player.bounceY += (0 - player.bounceY) * 0.28;
   player.scaleX += (1 - player.scaleX) * 0.22;
   player.scaleY += (1 - player.scaleY) * 0.22;
@@ -665,30 +703,11 @@ function drawNeonStair(x, y, isCurrent) {
   ctx.save();
   ctx.fillStyle = isCurrent ? "rgba(0, 242, 254, 0.25)" : "rgba(80, 25, 140, 0.4)";
   ctx.fillRect(rx, y, w, h);
-
   ctx.fillStyle = isCurrent ? "#ffffff" : "#c084fc";
   ctx.fillRect(rx, y, w, 3);
-
   ctx.strokeStyle = isCurrent ? "#00f2fe" : "#7928ca";
   ctx.lineWidth = 1.5;
   ctx.strokeRect(rx, y, w, h);
-  ctx.restore();
-}
-
-function drawPlayer(x, y) {
-  ctx.save();
-  // 바운스 오프셋 적용
-  ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
-  ctx.scale(player.dir * player.scaleX, player.scaleY);
-
-  // 캐릭터 그림자
-  ctx.fillStyle = "rgba(0, 242, 254, 0.25)";
-  ctx.beginPath();
-  ctx.ellipse(0, -player.bounceY, 16, 4, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 2프레임 애니메이션 도트 매트릭스 렌더링
-  drawAnimatedPixelMatrix(currentSelectedChar, player.animFrame, 2.5);
   ctx.restore();
 }
 
@@ -723,7 +742,7 @@ function drawHUD() {
     ctx.fillText("COSMIC INFINITE STAIRS", canvas.width / 2, canvas.height / 2 - 20);
     ctx.fillStyle = "#e2e8f0";
     ctx.font = "14px sans-serif";
-    ctx.fillText("오르기 버튼을 눌러 출발!", canvas.width / 2, canvas.height / 2 + 15);
+    ctx.fillText("하단 버튼 또는 키를 눌러 출발!", canvas.width / 2, canvas.height / 2 + 15);
   } else if (gameState === "GAMEOVER") {
     ctx.fillStyle = "rgba(10, 5, 20, 0.85)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -736,7 +755,7 @@ function drawHUD() {
     ctx.fillText(`SCORE: ${score} (BEST: ${highScore})`, canvas.width / 2, canvas.height / 2 + 15);
     ctx.fillStyle = "#a855f7";
     ctx.font = "13px sans-serif";
-    ctx.fillText("하단 버튼 터치 시 재시작", canvas.width / 2, canvas.height / 2 + 50);
+    ctx.fillText("버튼 터치 시 재시작", canvas.width / 2, canvas.height / 2 + 50);
   }
 }
 
@@ -754,7 +773,7 @@ function draw() {
 
   const pScreenX = ANCHOR_X + (player.x * STAIR_W) - camX;
   const pScreenY = ANCHOR_Y - (player.y * STAIR_H) + camY;
-  drawPlayer(pScreenX, pScreenY);
+  drawPlayerSprite(pScreenX, pScreenY);
 
   drawHUD();
 
@@ -764,7 +783,7 @@ function draw() {
   });
 }
 
-renderControls();
+updateKeyLabels();
 renderCharacterRoster();
 initGame();
 draw();
