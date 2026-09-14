@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Cosmic Infinite Stairs - 11종 캐릭터 & 커스텀 키 설정</title>
+  <title>Cosmic Infinite Stairs - 전체 캐릭터 즉시 선택판</title>
   <style>
     * {
       box-sizing: border-box;
@@ -36,7 +36,6 @@
       flex-direction: column;
       overflow: hidden;
     }
-    /* 상단 헤더 */
     #top-bar {
       height: 46px;
       background: #0d0926;
@@ -82,7 +81,6 @@
       image-rendering: pixelated;
     }
 
-    /* 하단 조작 컨트롤러 */
     #touch-controller {
       height: 95px;
       background: rgba(10, 7, 26, 0.95);
@@ -128,7 +126,7 @@
       color: #facc15;
     }
 
-    /* 11종 캐릭터 캐러셀 */
+    /* 상시 선택 가능한 캐릭터 캐러셀 */
     #character-roster {
       height: 95px;
       background: #05030f;
@@ -161,25 +159,23 @@
       background: #1b1347;
       box-shadow: 0 0 12px rgba(0, 242, 254, 0.35);
     }
-    .char-card.locked {
-      filter: grayscale(1);
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
     .char-card .card-name {
       font-size: 11px;
       font-weight: bold;
       margin-top: 4px;
       text-align: center;
     }
-    .char-card .card-condition {
-      font-size: 8px;
-      color: #f43f5e;
+    .char-card .card-status {
+      font-size: 9px;
+      color: #a855f7;
       text-align: center;
       margin-top: 2px;
     }
+    .char-card.selected .card-status {
+      color: #00f2fe;
+      font-weight: bold;
+    }
 
-    /* 커스텀 키 설정 모달 */
     #settings-modal {
       position: absolute;
       top: 0;
@@ -314,19 +310,19 @@ function playBeep(freq, type = "sine", duration = 0.04) {
   osc.stop(audioCtx.currentTime + duration);
 }
 
-// 이미지 리소스 로더
+// 이미지 리소스 (방식 2 규격)
 const images = {
   sheet8: new Image(),
   amongUs: new Image(),
   charVec: new Image(),
   spriteSheet: new Image()
 };
-images.sheet8.src = "Gemini_Generated_Image_dr7ceydr7ceydr7c.png";
-images.amongUs.src = "among-us.svg";
-images.charVec.src = "Charactervector.svg";
-images.spriteSheet.src = "SpriteSheet.svg";
+images.sheet8.src = "sheet8.png";
+images.amongUs.src = "among.svg";
+images.charVec.src = "pixel1.svg";
+images.spriteSheet.src = "pixel2.svg";
 
-// 계단 및 물리 규격
+// 계단 물리 규격
 const STAIR_W = 58;
 const STAIR_H = 30;
 const ANCHOR_X = canvas.width / 2;
@@ -343,26 +339,25 @@ let camY = 0;
 let targetCamX = 0;
 let targetCamY = 0;
 
-// 커스텀 키 설정 상태
 const keyBindings = {
   turn: { code: "KeyZ", label: "Z" },
   climb: { code: "KeyX", label: "X" }
 };
-let listeningTarget = null; // 'turn' 또는 'climb'
+let listeningTarget = null;
 
-// 11종 전체 캐릭터 메타데이터 & 시트 크롭 좌표 매핑
+// 11종 전체 캐릭터 (전부 즉시 선택 가능)
 const characters = [
-  { id: "businessman", name: "비즈니스맨", reqScore: 0, unlocked: true, type: "sheet8", grid: { col: 1, row: 2 } },
-  { id: "boxer", name: "복서", reqScore: 10, unlocked: false, type: "sheet8", grid: { col: 0, row: 1 } },
-  { id: "dracula", name: "드라큘라", reqScore: 20, unlocked: false, type: "sheet8", grid: { col: 0, row: 3 } },
-  { id: "delivery", name: "택배기사", reqScore: 30, unlocked: false, type: "sheet8", grid: { col: 1, row: 3 } },
-  { id: "sheriff", name: "보안관", reqScore: 40, unlocked: false, type: "sheet8", grid: { col: 1, row: 1 } },
-  { id: "tennis", name: "테니스선수", reqScore: 50, unlocked: false, type: "sheet8", grid: { col: 0, row: 2 } },
-  { id: "soldier", name: "근위병", reqScore: 60, unlocked: false, type: "sheet8", grid: { col: 0, row: 0 } },
-  { id: "bunny", name: "바니걸", reqScore: 70, unlocked: false, type: "sheet8", grid: { col: 1, row: 0 } },
-  { id: "among", name: "어몽어스", reqScore: 80, unlocked: false, type: "among" },
-  { id: "redboy", name: "빨간티소년", reqScore: 90, unlocked: false, type: "charVec" },
-  { id: "redhair", name: "붉은머리소년", reqScore: 100, unlocked: false, type: "spriteSheet" }
+  { id: "businessman", name: "비즈니스맨", type: "sheet8", grid: { col: 1, row: 2 } },
+  { id: "boxer", name: "복서", type: "sheet8", grid: { col: 0, row: 1 } },
+  { id: "dracula", name: "드라큘라", type: "sheet8", grid: { col: 0, row: 3 } },
+  { id: "delivery", name: "택배기사", type: "sheet8", grid: { col: 1, row: 3 } },
+  { id: "sheriff", name: "보안관", type: "sheet8", grid: { col: 1, row: 1 } },
+  { id: "tennis", name: "테니스선수", type: "sheet8", grid: { col: 0, row: 2 } },
+  { id: "soldier", name: "근위병", type: "sheet8", grid: { col: 0, row: 0 } },
+  { id: "bunny", name: "바니걸", type: "sheet8", grid: { col: 1, row: 0 } },
+  { id: "among", name: "어몽어스", type: "among" },
+  { id: "redboy", name: "빨간티소년", type: "charVec" },
+  { id: "redhair", name: "붉은머리소년", type: "spriteSheet" }
 ];
 let currentSelectedChar = "businessman";
 
@@ -386,7 +381,6 @@ const spaceStars = Array.from({ length: 45 }, () => ({
   glowSpeed: Math.random() * 0.02 + 0.01
 }));
 
-// 캐릭터 렌더러
 function drawPlayerSprite(x, y) {
   ctx.save();
   ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
@@ -411,7 +405,6 @@ function drawPlayerSprite(x, y) {
     const blockX = char.grid.col * blockW;
     const blockY = char.grid.row * blockH;
 
-    // 측면 걷기 모션 프레임 (열 1과 열 3 교차)
     const sx = blockX + (frame === 0 ? cellW * 1 : cellW * 3);
     const sy = blockY;
 
@@ -423,7 +416,7 @@ function drawPlayerSprite(x, y) {
     const drawH = 46;
     ctx.drawImage(images.amongUs, -drawW / 2, -drawH, drawW, drawH);
 
-  } else if ((char.type === "charVec" || char.type === "spriteSheet")) {
+  } else if (char.type === "charVec" || char.type === "spriteSheet") {
     const img = char.type === "charVec" ? images.charVec : images.spriteSheet;
     if (img.complete && img.naturalWidth > 0) {
       const W = img.naturalWidth;
@@ -431,13 +424,12 @@ function drawPlayerSprite(x, y) {
       const cellW = W / 4;
       const cellH = H / 4;
       const sx = (frame * 2 + 1) * cellW;
-      const sy = 2 * cellH; // 3행: 측면 걷기
+      const sy = 2 * cellH;
 
       const drawSize = 40;
       ctx.drawImage(img, sx, sy, cellW, cellH, -drawSize / 2, -drawSize, drawSize, drawSize);
     }
   } else {
-    // 대체 임시 박스
     ctx.fillStyle = "#00f2fe";
     ctx.fillRect(-12, -36, 24, 36);
   }
@@ -452,7 +444,6 @@ function updateKeyLabels() {
   document.getElementById("bind-climb-btn").innerText = keyBindings.climb.label;
 }
 
-// 모달 및 키 바인딩 컨트롤러
 const settingsBtn = document.getElementById("settings-btn");
 const settingsModal = document.getElementById("settings-modal");
 const closeModalBtn = document.getElementById("close-modal-btn");
@@ -509,23 +500,23 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// 캐릭터 캐러셀 UI
+// 상시 선택 캐릭터 캐러셀 렌더러
 function renderCharacterRoster() {
   const roster = document.getElementById("character-roster");
   roster.innerHTML = "";
 
   characters.forEach(ch => {
+    const isSelected = ch.id === currentSelectedChar;
     const card = document.createElement("div");
-    card.className = `char-card ${ch.id === currentSelectedChar ? 'selected' : ''} ${!ch.unlocked ? 'locked' : ''}`;
+    card.className = `char-card ${isSelected ? 'selected' : ''}`;
     
     card.innerHTML = `
       <div style="font-size: 18px;">${getCharIcon(ch.id)}</div>
       <div class="card-name">${ch.name}</div>
-      <div class="card-condition">${ch.unlocked ? '선택 가능' : ch.reqScore + '점 해금'}</div>
+      <div class="card-status">${isSelected ? '선택됨' : '선택'}</div>
     `;
 
     card.addEventListener("click", () => {
-      if (!ch.unlocked) return;
       currentSelectedChar = ch.id;
       renderCharacterRoster();
     });
@@ -541,17 +532,6 @@ function getCharIcon(id) {
     among: "🚀", redboy: "👦", redhair: "🧑"
   };
   return map[id] || "👤";
-}
-
-function checkUnlocks() {
-  let changed = false;
-  characters.forEach(ch => {
-    if (!ch.unlocked && highScore >= ch.reqScore) {
-      ch.unlocked = true;
-      changed = true;
-    }
-  });
-  if (changed) renderCharacterRoster();
 }
 
 function initGame() {
@@ -613,7 +593,6 @@ function step(isTurn) {
     score++;
     if (score > highScore) {
       highScore = score;
-      checkUnlocks();
     }
     energy = Math.min(MAX_ENERGY, energy + 0.13);
 
@@ -637,10 +616,8 @@ function step(isTurn) {
 function gameOver() {
   gameState = "GAMEOVER";
   playBeep(130, "sawtooth", 0.25);
-  checkUnlocks();
 }
 
-// 터치 버튼 바인딩
 const turnBtn = document.getElementById("btn-turn");
 const climbBtn = document.getElementById("btn-climb");
 const bindTouch = (btn, isTurn) => {
