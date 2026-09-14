@@ -292,7 +292,6 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Web Audio API
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function playBeep(freq, type = "sine", duration = 0.04) {
   if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -309,15 +308,8 @@ function playBeep(freq, type = "sine", duration = 0.04) {
 }
 
 // ==========================================
-// Vercel CORS 차단 해제 & 픽셀 크로마키 파이프라인
+// 100% 완전 투명화 파이프라인 (비동기 프리로드 게이트)
 // ==========================================
-const rawImages = {
-  sheet8: new Image(),
-  among: new Image(),
-  pixel1: new Image(),
-  pixel2: new Image()
-};
-
 const processedCanvases = {
   sheet8: null,
   among: null,
@@ -325,41 +317,46 @@ const processedCanvases = {
   pixel2: null
 };
 
-function processChromaKey(img, key) {
-  try {
-    const off = document.createElement("canvas");
-    off.width = img.naturalWidth || img.width;
-    off.height = img.naturalHeight || img.height;
-    const octx = off.getContext("2d");
-    octx.drawImage(img, 0, 0);
+function cleanAndProcessImage(url, key) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const off = document.createElement("canvas");
+      off.width = img.naturalWidth || img.width;
+      off.height = img.naturalHeight || img.height;
+      const octx = off.getContext("2d");
+      octx.drawImage(img, 0, 0);
 
-    const imgData = octx.getImageData(0, 0, off.width, off.height);
-    const d = imgData.data;
+      try {
+        const imgData = octx.getImageData(0, 0, off.width, off.height);
+        const d = imgData.data;
 
-    // 흰색 및 압축 손실 아티팩트(밝은 회색) 완전 투명화
-    for (let i = 0; i < d.length; i += 4) {
-      if (d[i] > 215 && d[i + 1] > 215 && d[i + 2] > 215) {
-        d[i + 3] = 0;
+        // 배경 투명화: 밝기(Luminance)와 RGB 임계치를 190까지 대폭 낮춰 외곽 노이즈 완전 박멸
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i];
+          const g = d[i + 1];
+          const b = d[i + 2];
+          // 회색빛 압축 찌꺼기 및 순백색 포함 조건
+          if (r > 190 && g > 190 && b > 190) {
+            d[i + 3] = 0;
+          }
+        }
+        octx.putImageData(imgData, 0, 0);
+        processedCanvases[key] = off;
+      } catch (err) {
+        console.error("CORS 보안으로 오프스크린 캔버스 처리 실패:", err);
+        processedCanvases[key] = img;
       }
-    }
-    octx.putImageData(imgData, 0, 0);
-    processedCanvases[key] = off;
-  } catch (err) {
-    console.error("크로마키 처리 실패:", err);
-    processedCanvases[key] = img;
-  }
+      resolve();
+    };
+    img.onerror = () => {
+      console.error("이미지 로드 실패:", url);
+      resolve();
+    };
+    img.src = url;
+  });
 }
-
-// CORS 설정 적용
-Object.keys(rawImages).forEach(key => {
-  rawImages[key].crossOrigin = "anonymous";
-  rawImages[key].onload = () => processChromaKey(rawImages[key], key);
-});
-
-rawImages.sheet8.src = "sheet8.png";
-rawImages.among.src = "among.svg";
-rawImages.pixel1.src = "pixel1.svg";
-rawImages.pixel2.src = "pixel2.svg";
 
 const STAIR_W = 58;
 const STAIR_H = 30;
@@ -423,14 +420,14 @@ function drawPlayerSprite(x, y) {
   ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
   ctx.scale(player.dir * player.scaleX, player.scaleY);
 
-  // 캐릭터 발밑 그림자
   ctx.fillStyle = "rgba(0, 242, 254, 0.25)";
   ctx.beginPath();
   ctx.ellipse(0, -player.bounceY, 20, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
   const char = characters.find(c => c.id === currentSelectedChar) || characters[0];
-  const src = processedCanvases[char.sourceKey] || rawImages[char.sourceKey];
+  // 원본 이미지가 아닌 반드시 투명 처리된 오프스크린 캔버스만 참조
+  const src = processedCanvases[char.sourceKey];
   const frame = player.animFrame % 2;
 
   if (src && (src.width || src.naturalWidth)) {
@@ -448,7 +445,7 @@ function drawPlayerSprite(x, y) {
       const blockX = char.grid.col * blockW;
       const blockY = char.grid.row * blockH;
 
-      // 상단 검은 구분선 및 좌우 외곽선 배제를 위한 패딩 적용
+      // 검은색 구분선 침범 방지 세이프 마진
       const padTop = rawCellH * 0.12;
       const padBottom = rawCellH * 0.04;
       const padX = rawCellW * 0.08;
@@ -471,7 +468,6 @@ function drawPlayerSprite(x, y) {
       sw = totalW; sh = totalH;
     }
 
-    // 1.7배 크기 보정 (비율 고정)
     const TARGET_MAX_H = 75;
     const TARGET_MAX_W = 75;
     const aspect = sw / sh;
@@ -488,6 +484,7 @@ function drawPlayerSprite(x, y) {
     ctx.drawImage(src, sx, sy, sw, sh, -drawW / 2, -drawH, drawW, drawH);
 
   } else {
+    // 배경 제거 작업 완료 전 대기용 실루엣
     ctx.fillStyle = "#00f2fe";
     ctx.fillRect(-16, -50, 32, 50);
   }
@@ -817,10 +814,21 @@ function draw() {
   });
 }
 
+// ==========================================
+// 모든 이미지 투명화가 완료된 후 안전하게 게임 시작
+// ==========================================
 updateKeyLabels();
 renderCharacterRoster();
 initGame();
-draw();
+
+Promise.all([
+  cleanAndProcessImage("sheet8.png", "sheet8"),
+  cleanAndProcessImage("among.svg", "among"),
+  cleanAndProcessImage("pixel1.svg", "pixel1"),
+  cleanAndProcessImage("pixel2.svg", "pixel2")
+]).then(() => {
+  draw();
+});
 </script>
 </body>
 </html>
