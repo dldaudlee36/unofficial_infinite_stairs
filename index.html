@@ -2,58 +2,118 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>무한의 계단 - 실제 게임 스킨 구현판</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Cosmic Stairs - 우주 무한의 계단</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
     body {
-      background: #1a1c23;
+      background: #03030c;
       display: flex;
-      flex-direction: column;
-      align-items: center;
       justify-content: center;
+      align-items: center;
       min-height: 100vh;
-      font-family: 'Segoe UI', -apple-system, sans-serif;
+      font-family: 'Pretendard', -apple-system, sans-serif;
       color: #fff;
       overflow: hidden;
-      user-select: none;
     }
-    #game-container {
+    /* 모바일 디바이스 프레임 */
+    #mobile-frame {
       position: relative;
-      border: 4px solid #4a3425;
-      border-radius: 8px;
+      width: 100vw;
+      max-width: 420px;
+      height: 100vh;
+      max-height: 840px;
+      background: #080718;
+      border: 2px solid #241c4a;
+      box-shadow: 0 0 50px rgba(112, 0, 255, 0.25);
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    }
+    #canvas-wrap {
+      flex: 1;
+      position: relative;
+      width: 100%;
     }
     canvas {
       display: block;
-      background: #4da64d;
-      image-rendering: pixelated;
+      width: 100%;
+      height: 100%;
     }
-    #guide {
-      margin-top: 14px;
+    /* 모바일 하단 조작 컨트롤러 */
+    #touch-controller {
+      height: 120px;
+      background: rgba(10, 8, 25, 0.95);
+      border-top: 1px solid #3b2d71;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 12px 16px 16px 16px;
+      box-sizing: border-box;
+      z-index: 10;
+    }
+    .game-btn {
+      background: linear-gradient(180deg, #1b173d 0%, #0d0b21 100%);
+      border: 2px solid #00f2fe;
+      border-radius: 16px;
+      color: #fff;
       display: flex;
-      gap: 16px;
-      font-size: 14px;
-      color: #cbd5e1;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-size: 18px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0, 242, 254, 0.2);
+      transition: transform 0.05s ease, background 0.05s ease;
+      touch-action: manipulation;
     }
-    .badge {
-      background: #334155;
-      padding: 3px 8px;
-      border-radius: 4px;
-      border: 1px solid #64748b;
-      color: #facc15;
-      font-weight: bold;
+    .game-btn:active {
+      transform: scale(0.95);
+      background: #00f2fe;
+      color: #050515;
+      box-shadow: 0 0 25px rgba(0, 242, 254, 0.6);
+    }
+    .game-btn.turn-btn {
+      border-color: #ff007f;
+      box-shadow: 0 4px 15px rgba(255, 0, 127, 0.2);
+    }
+    .game-btn.turn-btn:active {
+      background: #ff007f;
+      color: #fff;
+      box-shadow: 0 0 25px rgba(255, 0, 127, 0.6);
+    }
+    .game-btn span.sub-key {
+      font-size: 11px;
+      opacity: 0.6;
+      font-weight: normal;
+      margin-top: 2px;
     }
   </style>
 </head>
 <body>
 
-<div id="game-container">
-  <canvas id="gameCanvas" width="380" height="620"></canvas>
-</div>
-<div id="guide">
-  <div><span class="badge">Z</span> 또는 <span class="badge">←</span> : 방향 전환(돌면서 오르기)</div>
-  <div><span class="badge">X</span> 또는 <span class="badge">↑</span> : 오르기</div>
+<div id="mobile-frame">
+  <div id="canvas-wrap">
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+  </div>
+  <div id="touch-controller">
+    <button class="game-btn turn-btn" id="btn-turn">
+      방향 전환
+      <span class="sub-key">[Z] / [←]</span>
+    </button>
+    <button class="game-btn" id="btn-climb">
+      오르기
+      <span class="sub-key">[X] / [↑]</span>
+    </button>
+  </div>
 </div>
 
 <script>
@@ -62,13 +122,13 @@ const ctx = canvas.getContext("2d");
 
 // 오디오
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function playBeep(freq, type = "square", duration = 0.04) {
+function playBeep(freq, type = "sine", duration = 0.04) {
   if (audioCtx.state === 'suspended') audioCtx.resume();
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   osc.type = type;
   osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+  gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
   osc.connect(gain);
   gain.connect(audioCtx.destination);
@@ -76,13 +136,13 @@ function playBeep(freq, type = "square", duration = 0.04) {
   osc.stop(audioCtx.currentTime + duration);
 }
 
-// 스크린샷 비율에 맞춘 규격
-const STAIR_W = 68;
-const STAIR_H = 34;
+// 계단 물리 상수
+const STAIR_W = 60;
+const STAIR_H = 32;
 const ANCHOR_X = canvas.width / 2;
-const ANCHOR_Y = canvas.height - 180;
+const ANCHOR_Y = canvas.height - 130;
 
-let gameState = "READY"; 
+let gameState = "READY"; // READY, PLAY, GAMEOVER
 let score = 0;
 let energy = 1.0;
 const MAX_ENERGY = 1.0;
@@ -92,14 +152,27 @@ let camY = 0;
 let targetCamX = 0;
 let targetCamY = 0;
 
+// 귀여운 우주 생명체 (슬라임 에일리언)
 const player = {
   x: 0,
   y: 0,
-  dir: 1,
-  squash: 1
+  dir: 1, // 1: 우측, -1: 좌측
+  scaleX: 1,
+  scaleY: 1,
+  eyeBlink: 0
 };
 
 let stairs = [];
+let particles = [];
+
+// 우주 배경 성운 및 별빛 데이터
+const spaceStars = Array.from({ length: 45 }, () => ({
+  x: Math.random() * canvas.width,
+  y: Math.random() * canvas.height,
+  r: Math.random() * 1.5 + 0.5,
+  alpha: Math.random(),
+  glowSpeed: Math.random() * 0.02 + 0.01
+}));
 
 function initGame() {
   score = 0;
@@ -110,7 +183,7 @@ function initGame() {
   let curDir = 1;
   let runLength = 3;
 
-  for (let i = 1; i < 120; i++) {
+  for (let i = 1; i < 100; i++) {
     if (runLength <= 0) {
       curDir = -curDir;
       runLength = Math.floor(Math.random() * 4) + 1;
@@ -123,12 +196,14 @@ function initGame() {
   player.x = 0;
   player.y = 0;
   player.dir = 1;
-  player.squash = 1;
+  player.scaleX = 1;
+  player.scaleY = 1;
 
   camX = 0;
   camY = 0;
   targetCamX = 0;
   targetCamY = 0;
+  particles = [];
 }
 
 function appendNextStair() {
@@ -136,9 +211,7 @@ function appendNextStair() {
   const prev = stairs[stairs.length - 2];
   let curDir = last.x - prev.x;
 
-  if (Math.random() < 0.35) {
-    curDir = -curDir;
-  }
+  if (Math.random() < 0.36) curDir = -curDir;
 
   stairs.push({
     x: last.x + curDir,
@@ -146,7 +219,22 @@ function appendNextStair() {
   });
 }
 
+function spawnCosmicDust(x, y, color) {
+  for (let i = 0; i < 6; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 5,
+      vy: -Math.random() * 4 - 1,
+      size: Math.random() * 3 + 1,
+      life: 1.0,
+      color: color
+    });
+  }
+}
+
+// 오르기 액션
 function step(isTurn) {
+  if (gameState === "READY") gameState = "PLAY";
   if (gameState !== "PLAY") return;
 
   if (isTurn) {
@@ -162,14 +250,19 @@ function step(isTurn) {
     player.y = nextTargetY;
     score++;
     energy = Math.min(MAX_ENERGY, energy + 0.13);
-    player.squash = 0.8;
+    
+    // 젤리 출렁임 애니메이션
+    player.scaleX = 1.3;
+    player.scaleY = 0.7;
 
     targetCamX = player.x * STAIR_W;
     targetCamY = player.y * STAIR_H;
 
     appendNextStair();
-    playBeep(440 + (score % 15) * 18, "square", 0.04);
+    spawnCosmicDust(ANCHOR_X, ANCHOR_Y, isTurn ? "#ff007f" : "#00f2fe");
+    playBeep(520 + (score % 16) * 20, "sine", 0.05);
   } else {
+    // 헛디딤
     player.x = nextTargetX;
     player.y = nextTargetY;
     gameOver();
@@ -178,31 +271,40 @@ function step(isTurn) {
 
 function gameOver() {
   gameState = "GAMEOVER";
-  playBeep(120, "sawtooth", 0.25);
+  playBeep(140, "triangle", 0.3);
 }
 
+// PC 키보드 바인딩
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
+  if (e.code === "Space" && gameState === "GAMEOVER") {
+    initGame();
+    gameState = "PLAY";
+    return;
+  }
+  if (e.key === "z" || e.key === "Z" || e.key === "ArrowLeft") step(true);
+  else if (e.key === "x" || e.key === "X" || e.key === "ArrowUp") step(false);
+});
 
-  if (gameState === "READY") {
-    if (e.code === "Space" || e.key === "z" || e.key === "x" || e.key === "ArrowLeft" || e.key === "ArrowUp") {
-      gameState = "PLAY";
-      if (e.key === "z" || e.key === "ArrowLeft") step(true);
-      else if (e.key === "x" || e.key === "ArrowUp") step(false);
-    }
-  } else if (gameState === "PLAY") {
-    if (e.key === "z" || e.key === "Z" || e.key === "ArrowLeft") {
-      step(true);
-    } else if (e.key === "x" || e.key === "X" || e.key === "ArrowUp") {
-      step(false);
-    }
-  } else if (gameState === "GAMEOVER") {
-    if (e.code === "Space" || e.key === "r" || e.key === "R") {
+// 모바일 하단 터치/클릭 바인딩
+const turnBtn = document.getElementById("btn-turn");
+const climbBtn = document.getElementById("btn-climb");
+
+function bindBtn(btn, isTurn) {
+  const trigger = (e) => {
+    e.preventDefault();
+    if (gameState === "GAMEOVER") {
       initGame();
       gameState = "PLAY";
+      return;
     }
-  }
-});
+    step(isTurn);
+  };
+  btn.addEventListener("touchstart", trigger, { passive: false });
+  btn.addEventListener("mousedown", trigger);
+}
+bindBtn(turnBtn, true);
+bindBtn(climbBtn, false);
 
 function update() {
   if (gameState === "PLAY") {
@@ -214,240 +316,250 @@ function update() {
     }
   }
 
+  // 부드러운 카메라 추적
   camX += (targetCamX - camX) * 0.35;
   camY += (targetCamY - camY) * 0.35;
-  player.squash += (1 - player.squash) * 0.25;
+
+  // 슬라임 탄성 복원
+  player.scaleX += (1 - player.scaleX) * 0.2;
+  player.scaleY += (1 - player.scaleY) * 0.2;
+
+  // 눈 깜빡임
+  player.eyeBlink = (player.eyeBlink + 0.02) % (Math.PI * 2);
+
+  // 파티클
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= 0.05;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
 }
 
-// 실제 게임 스크린샷 기반 밀림 배경 렌더링
-function drawJungleBackground() {
-  // 하늘/숲 상단 그라디언트
-  const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  bgGrad.addColorStop(0, "#50a042");
-  bgGrad.addColorStop(0.5, "#2d7c2a");
-  bgGrad.addColorStop(1, "#174e1e");
-  ctx.fillStyle = bgGrad;
+// 우주 네온 배경 드로잉
+function drawCosmicBackground() {
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0, "#05030f");
+  grad.addColorStop(0.5, "#0b0821");
+  grad.addColorStop(1, "#170a31");
+  ctx.fillStyle = grad;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 야자수 줄기 패턴
-  ctx.fillStyle = "#4a6838";
-  for (let i = 20; i < canvas.width; i += 75) {
-    ctx.fillRect(i, 0, 16, canvas.height);
-    // 줄기 가로 줄무늬
-    ctx.fillStyle = "#334926";
-    for (let j = 0; j < canvas.height; j += 25) {
-      ctx.fillRect(i, j, 16, 3);
-    }
-    ctx.fillStyle = "#4a6838";
-  }
+  // 성운 구름
+  const nebula = ctx.createRadialGradient(canvas.width*0.8, canvas.height*0.3, 20, canvas.width*0.8, canvas.height*0.3, 180);
+  nebula.addColorStop(0, "rgba(255, 0, 128, 0.18)");
+  nebula.addColorStop(1, "transparent");
+  ctx.fillStyle = nebula;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 나뭇잎 덩어리 실루엣
-  ctx.fillStyle = "#388a29";
-  for (let y = -20; y < canvas.height; y += 90) {
+  // 별무리
+  spaceStars.forEach(s => {
+    s.alpha += s.glowSpeed;
+    const a = (Math.sin(s.alpha) + 1) / 2;
+    ctx.fillStyle = `rgba(200, 230, 255, ${a * 0.8 + 0.2})`;
     ctx.beginPath();
-    ctx.arc(40, y, 70, 0, Math.PI * 2);
-    ctx.arc(canvas.width - 30, y + 40, 80, 0, Math.PI * 2);
-    ctx.arc(canvas.width / 2, y + 20, 60, 0, Math.PI * 2);
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
     ctx.fill();
-  }
-
-  // 바닥 흙길 (하단)
-  ctx.fillStyle = "#d3a654";
-  ctx.beginPath();
-  ctx.moveTo(0, canvas.height);
-  ctx.lineTo(canvas.width, canvas.height - 120);
-  ctx.lineTo(canvas.width, canvas.height);
-  ctx.fill();
+  });
 }
 
-// 실제 게임 스크린샷 1:1 석재 점박이 계단 블록 드로잉
-function drawStair(x, y) {
+// 네온 크리스탈 계단 드로잉
+function drawNeonStair(x, y, isCurrent) {
   const w = STAIR_W;
   const h = STAIR_H;
-  const rx = Math.floor(x - w / 2);
-  const ry = Math.floor(y);
+  const rx = x - w / 2;
 
-  // 1. 외곽선 및 입체 본체
-  ctx.fillStyle = "#222222";
-  ctx.fillRect(rx, ry, w, h);
+  ctx.save();
 
-  // 2. 상단면 (밝은 회색)
-  ctx.fillStyle = "#e5e5e5";
-  ctx.fillRect(rx + 2, ry + 2, w - 4, h - 4);
+  // 상단 발판 발광
+  ctx.shadowColor = isCurrent ? "#00f2fe" : "rgba(180, 70, 255, 0.5)";
+  ctx.shadowBlur = isCurrent ? 12 : 6;
 
-  // 3. 우측/하단 음영 (명암 처리)
-  ctx.fillStyle = "#b5b5b5";
-  ctx.fillRect(rx + w - 6, ry + 2, 4, h - 4);
-  ctx.fillRect(rx + 2, ry + h - 6, w - 4, 4);
+  // 블록 본체 (반투명 네온 글래스)
+  ctx.fillStyle = isCurrent ? "rgba(0, 242, 254, 0.25)" : "rgba(80, 25, 140, 0.4)";
+  ctx.fillRect(rx, y, w, h);
 
-  // 4. 스크린샷 특유의 불규칙한 직사각형 점박이 픽셀 텍스처
-  ctx.fillStyle = "#474747";
-  ctx.fillRect(rx + 6, ry + 6, 6, 4);
-  ctx.fillRect(rx + 20, ry + 5, 4, 4);
-  ctx.fillRect(rx + 36, ry + 7, 8, 3);
-  ctx.fillRect(rx + 52, ry + 5, 4, 5);
+  // 상단 네온 라인
+  ctx.fillStyle = isCurrent ? "#ffffff" : "#a855f7";
+  ctx.fillRect(rx, y, w, 4);
 
-  ctx.fillStyle = "#666666";
-  ctx.fillRect(rx + 10, ry + 16, 5, 5);
-  ctx.fillRect(rx + 28, ry + 14, 7, 4);
-  ctx.fillRect(rx + 44, ry + 17, 5, 5);
+  // 사이버 네온 테두리
+  ctx.strokeStyle = isCurrent ? "#00f2fe" : "#c084fc";
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(rx, y, w, h);
 
-  ctx.fillStyle = "#2b2b2b";
-  ctx.fillRect(rx + 16, ry + 24, 6, 4);
-  ctx.fillRect(rx + 38, ry + 23, 5, 4);
-  ctx.fillRect(rx + 50, ry + 22, 6, 4);
+  ctx.restore();
 }
 
-// 스크린샷 인물: 둥근 안경, 갈색 왁스 머리, 남색 정장 비즈니스맨
-function drawPixelCharacter(x, y) {
+// 귀여운 우주 젤리 생명체 (우주 슬라임 크리처)
+function drawCuteAlien(x, y) {
   ctx.save();
-  ctx.translate(Math.floor(x), Math.floor(y));
-  ctx.scale(player.dir, player.squash);
+  ctx.translate(x, y);
+  ctx.scale(player.dir * player.scaleX, player.scaleY);
 
-  const u = 2.4; // 픽셀 스케일 배율
-
-  // 그림자
-  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  // 발광 그림자
+  ctx.fillStyle = "rgba(0, 242, 254, 0.2)";
   ctx.beginPath();
   ctx.ellipse(0, 0, 16, 5, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // 1. 구두 (갈색)
-  ctx.fillStyle = "#4a2a18";
-  ctx.fillRect(-4 * u, -2 * u, 8 * u, 2 * u);
+  // 1. 말랑한 슬라임 몸통 (민트 에메랄드 그라디언트)
+  const bodyGrad = ctx.createRadialGradient(0, -18, 4, 0, -18, 20);
+  bodyGrad.addColorStop(0, "#80ffdb");
+  bodyGrad.addColorStop(0.7, "#48bfe3");
+  bodyGrad.addColorStop(1, "#5390d9");
 
-  // 2. 바지 (남색)
-  ctx.fillStyle = "#112656";
-  ctx.fillRect(-3 * u, -7 * u, 6 * u, 5 * u);
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  // 둥근 젤리 형상 패스
+  ctx.ellipse(0, -16, 17, 15, 0, 0, Math.PI * 2);
+  ctx.fill();
 
-  // 3. 재킷/몸통 (남색) & 셔츠/넥타이
-  ctx.fillStyle = "#183b82";
-  ctx.fillRect(-4 * u, -17 * u, 8 * u, 10 * u);
+  // 2. 머리 위 더듬이 & 노란 별
+  ctx.strokeStyle = "#80ffdb";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -30);
+  ctx.quadraticCurveTo(player.dir * 4, -38, 0, -42);
+  ctx.stroke();
 
-  // 하늘색 셔츠 트임
-  ctx.fillStyle = "#d4ecff";
-  ctx.fillRect(-1 * u, -17 * u, 4 * u, 8 * u);
+  // 더듬이 끝 발광 별구슬
+  ctx.fillStyle = "#ffea00";
+  ctx.shadowColor = "#ffea00";
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.arc(0, -44, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
 
-  // 빨간 넥타이
-  ctx.fillStyle = "#cc1b1b";
-  ctx.fillRect(0 * u, -15 * u, 2 * u, 6 * u);
+  // 3. 커다란 귀여운 눈망울
+  const blink = Math.sin(player.eyeBlink) > 0.98;
+  if (blink) {
+    // 눈 감음
+    ctx.strokeStyle = "#111b38";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(6, -17, 4, 0, Math.PI);
+    ctx.stroke();
+  } else {
+    // 왕눈이
+    ctx.fillStyle = "#0f172a";
+    ctx.beginPath();
+    ctx.arc(6, -17, 4.5, 0, Math.PI * 2);
+    ctx.fill();
 
-  // 4. 얼굴 (살구색)
-  ctx.fillStyle = "#fed7aa";
-  ctx.fillRect(-3 * u, -25 * u, 9 * u, 8 * u);
+    // 눈동자 하이라이트
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(7.5, -18.5, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  // 턱수염/하관 음영
-  ctx.fillStyle = "#e2b88b";
-  ctx.fillRect(-3 * u, -19 * u, 9 * u, 2 * u);
-
-  // 5. 둥근 뿔테 안경 (스크린샷 핵심)
-  ctx.fillStyle = "#111111";
-  // 안경 렌즈 테두리
-  ctx.fillRect(-1 * u, -24 * u, 4 * u, 4 * u);
-  ctx.fillRect(4 * u, -24 * u, 4 * u, 4 * u);
-  ctx.fillRect(3 * u, -23 * u, 2 * u, 2 * u); // 안경 브릿지
-  // 안경 알 투명 채우기
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0 * u, -23 * u, 2 * u, 2 * u);
-  ctx.fillRect(5 * u, -23 * u, 2 * u, 2 * u);
-
-  // 6. 갈색 왁스 헤어 (바람에 날리는 잔머리 포함)
-  ctx.fillStyle = "#542f13";
-  ctx.fillRect(-4 * u, -28 * u, 10 * u, 4 * u);
-  ctx.fillRect(-4 * u, -27 * u, 2 * u, 6 * u); // 구레나룻
-  // 삐친 머리카락 도트
-  ctx.fillRect(-6 * u, -27 * u, 2 * u, 2 * u);
-  ctx.fillRect(6 * u, -27 * u, 2 * u, 2 * u);
-  ctx.fillRect(1 * u, -30 * u, 3 * u, 2 * u);
+  // 4. 발그레한 핑크 볼터치
+  ctx.fillStyle = "rgba(255, 105, 180, 0.55)";
+  ctx.beginPath();
+  ctx.arc(4, -11, 3.5, 0, Math.PI * 2);
+  ctx.fill();
 
   ctx.restore();
 }
 
-// 스크린샷 상단 HUD: 금색 테두리 주황색 타임 바 & 레트로 점수 폰트
+// 네온 HUD (타임 바 & 점수)
 function drawHUD() {
-  const barW = 280;
-  const barH = 20;
+  // 1. 네온 에너지 게이지
+  const barW = 260;
+  const barH = 12;
   const barX = (canvas.width - barW) / 2;
-  const barY = 32;
+  const barY = 30;
 
-  // 외곽 황금색 프레임
-  ctx.fillStyle = "#8a5818";
-  ctx.fillRect(barX - 4, barY - 4, barW + 8, barH + 8);
-  ctx.fillStyle = "#ffd54f";
+  ctx.fillStyle = "rgba(10, 8, 30, 0.8)";
   ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+  ctx.strokeStyle = "#7928ca";
+  ctx.strokeRect(barX - 2, barY - 2, barW + 4, barH + 4);
 
-  // 내부 어두운 홈
-  ctx.fillStyle = "#3e1c00";
-  ctx.fillRect(barX, barY, barW, barH);
-
-  // 채워지는 주황색 바
   const fillW = Math.max(0, barW * energy);
-  ctx.fillStyle = "#e65100";
-  ctx.fillRect(barX, barY, fillW, barH);
-  // 바 상단 하이라이트 줄
-  ctx.fillStyle = "#ff9800";
-  ctx.fillRect(barX, barY, fillW, 4);
+  const gaugeGrad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+  gaugeGrad.addColorStop(0, "#ff007f");
+  gaugeGrad.addColorStop(1, "#00f2fe");
 
-  // 점수 텍스트 (스크린샷 중앙 숫자 스타일: 검은 외곽선 + 형광 연두색)
+  ctx.fillStyle = gaugeGrad;
+  ctx.shadowColor = "#00f2fe";
+  ctx.shadowBlur = 8;
+  ctx.fillRect(barX, barY, fillW, barH);
+  ctx.shadowBlur = 0;
+
+  // 2. 점수
   ctx.save();
-  ctx.font = "900 44px 'Courier New', Impact, monospace";
+  ctx.font = "900 44px sans-serif";
   ctx.textAlign = "center";
-  ctx.lineWidth = 7;
-  ctx.strokeStyle = "#000000";
-  ctx.strokeText(score, canvas.width / 2, 105);
-  ctx.fillStyle = "#76ff03";
-  ctx.fillText(score, canvas.width / 2, 105);
+  ctx.shadowColor = "rgba(0, 242, 254, 0.7)";
+  ctx.shadowBlur = 15;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(score, canvas.width / 2, 95);
   ctx.restore();
 
+  // 3. 상태 오버레이
   if (gameState === "READY") {
-    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillStyle = "rgba(5, 3, 15, 0.75)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#ffd54f";
-    ctx.font = "bold 26px sans-serif";
+    ctx.fillStyle = "#00f2fe";
+    ctx.font = "bold 24px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("INFINITE STAIRS", canvas.width / 2, canvas.height / 2 - 20);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "16px sans-serif";
-    ctx.fillText("SPACE 키를 눌러 시작", canvas.width / 2, canvas.height / 2 + 20);
+    ctx.fillText("COSMIC STAIRS", canvas.width / 2, canvas.height / 2 - 20);
+    ctx.fillStyle = "#e2e8f0";
+    ctx.font = "14px sans-serif";
+    ctx.fillText("하단 버튼을 눌러 출발!", canvas.width / 2, canvas.height / 2 + 15);
   } else if (gameState === "GAMEOVER") {
-    ctx.fillStyle = "rgba(0,0,0,0.75)";
+    ctx.fillStyle = "rgba(10, 5, 20, 0.85)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#ff3b30";
-    ctx.font = "900 38px Impact, sans-serif";
+    ctx.fillStyle = "#ff007f";
+    ctx.font = "900 36px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 30);
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 20px monospace";
     ctx.fillText(`SCORE: ${score}`, canvas.width / 2, canvas.height / 2 + 15);
-    ctx.fillStyle = "#fcd34d";
+    ctx.fillStyle = "#a855f7";
     ctx.font = "14px sans-serif";
-    ctx.fillText("[SPACE] 또는 [R] 키로 재시작", canvas.width / 2, canvas.height / 2 + 55);
+    ctx.fillText("버튼을 터치하여 재도전", canvas.width / 2, canvas.height / 2 + 50);
   }
 }
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 1. 밀림 배경
-  drawJungleBackground();
+  // 1. 우주 배경
+  drawCosmicBackground();
 
-  // 2. 스크린샷 텍스처 계단
-  const curStair = stairs[player.stepIndex || player.y];
-  stairs.forEach((s, idx) => {
+  // 2. 계단
+  stairs.forEach((s) => {
     const screenX = ANCHOR_X + (s.x * STAIR_W) - camX;
     const screenY = ANCHOR_Y - (s.y * STAIR_H) + camY;
 
-    if (screenY > -60 && screenY < canvas.height + 60) {
-      drawStair(screenX, screenY);
+    if (screenY > -50 && screenY < canvas.height + 50) {
+      const isCurrent = s.y === player.y;
+      drawNeonStair(screenX, screenY, isCurrent);
     }
   });
 
-  // 3. 안경 쓴 직장인 캐릭터
+  // 3. 우주 슬라임 크리처
   const pScreenX = ANCHOR_X + (player.x * STAIR_W) - camX;
   const pScreenY = ANCHOR_Y - (player.y * STAIR_H) + camY;
-  drawPixelCharacter(pScreenX, pScreenY);
+  drawCuteAlien(pScreenX, pScreenY);
 
-  // 4. UI 및 게이지
+  // 4. 네온 파티클
+  particles.forEach(p => {
+    ctx.save();
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 6;
+    ctx.fillRect(p.x, p.y, p.size, p.size);
+    ctx.restore();
+  });
+
+  // 5. HUD
   drawHUD();
 
   requestAnimationFrame(() => {
@@ -456,6 +568,7 @@ function draw() {
   });
 }
 
+// 시작
 initGame();
 draw();
 </script>
