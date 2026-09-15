@@ -303,6 +303,7 @@
       }
     }
 
+    /* 설정 모달 */
     #settings-modal {
       position: absolute;
       top: 0;
@@ -359,6 +360,28 @@
       animation: blink 0.8s infinite;
     }
     @keyframes blink { 50% { opacity: 0.5; } }
+
+    /* 치트키 버튼: Golden Rush */
+    #golden-rush-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%);
+      border: 2px solid #fffb00;
+      color: #05030e;
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      padding: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 8px;
+      box-shadow: 0 0 16px rgba(255, 215, 0, 0.4);
+      transition: all 0.15s ease;
+    }
+    #golden-rush-btn:active {
+      transform: scale(0.96);
+      box-shadow: 0 0 24px rgba(255, 215, 0, 0.8);
+    }
+
     .modal-close-btn {
       width: 100%;
       background: #00f2fe;
@@ -398,9 +421,10 @@
 
     <div id="character-roster"></div>
 
+    <!-- 설정 모달 -->
     <div id="settings-modal">
       <div class="modal-box">
-        <div class="modal-title">키 매핑 설정</div>
+        <div class="modal-title">키 매핑 & 치트 설정</div>
         <div class="key-row">
           <span>방향 전환 키:</span>
           <button class="key-assign-btn" id="bind-turn-btn"></button>
@@ -409,9 +433,13 @@
           <span>오르기 키:</span>
           <button class="key-assign-btn" id="bind-climb-btn"></button>
         </div>
-        <div style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 8px;">
+        <div style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 4px;">
           버튼을 누르고 변경할 키를 입력하세요.
         </div>
+        
+        <!-- 치트 버튼 -->
+        <button id="golden-rush-btn">⚡ Golden Rush (+30F)</button>
+
         <button class="modal-close-btn" id="close-modal-btn">설정 완료</button>
       </div>
     </div>
@@ -511,6 +539,8 @@ let camY = 0;
 let targetCamX = 0;
 let targetCamY = 0;
 
+let isAutoClimbing = false; // 치트 가동 중 수동 조작 방지
+
 const keyBindings = {
   turn: { code: "KeyZ", label: "Z" },
   climb: { code: "KeyX", label: "X" }
@@ -599,7 +629,7 @@ document.getElementById("clear-history-btn").addEventListener("click", () => {
 const player = {
   x: 0,
   y: 0,
-  dir: 1, // 1: 우측 계단, -1: 좌측 계단
+  dir: 1,
   scaleX: 1,
   scaleY: 1,
   bounceY: 0
@@ -615,15 +645,9 @@ const spaceStars = Array.from({ length: 45 }, () => ({
   glowSpeed: Math.random() * 0.02 + 0.01
 }));
 
-// ==========================================
-// 캐릭터 정면 시선 보정 스프라이트 렌더러
-// ==========================================
 function drawPlayerSprite(x, y) {
   ctx.save();
   ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
-  
-  // [핵심 교정]: 원본 시트 시선이 좌측이므로 -player.dir를 적용해야
-  // 우측(dir=1) 계단을 오를 때 캐릭터 얼굴이 계단 방향인 우측을 똑바로 바라봄
   ctx.scale(-player.dir * player.scaleX, player.scaleY);
 
   ctx.fillStyle = "rgba(0, 242, 254, 0.25)";
@@ -706,6 +730,7 @@ const settingsModal = document.getElementById("settings-modal");
 const closeModalBtn = document.getElementById("close-modal-btn");
 const bindTurnBtn = document.getElementById("bind-turn-btn");
 const bindClimbBtn = document.getElementById("bind-climb-btn");
+const goldenRushBtn = document.getElementById("golden-rush-btn");
 
 settingsBtn.addEventListener("click", () => {
   settingsModal.style.display = "flex";
@@ -731,7 +756,56 @@ bindClimbBtn.addEventListener("click", () => {
   bindClimbBtn.innerText = "키 입력...";
 });
 
+// ==========================================
+// Golden Rush: 30층 자동 도약 치트 엔진
+// ==========================================
+function triggerGoldenRush() {
+  if (isAutoClimbing) return;
+  
+  settingsModal.style.display = "none";
+  
+  if (gameState === "GAMEOVER") {
+    initGame();
+  }
+  gameState = "PLAY";
+  isAutoClimbing = true;
+
+  let stepsLeft = 30;
+
+  const climbInterval = setInterval(() => {
+    if (stepsLeft <= 0 || gameState !== "PLAY") {
+      clearInterval(climbInterval);
+      isAutoClimbing = false;
+      return;
+    }
+
+    // 다음 목표 계단의 위치 판별
+    const nextY = player.y + 1;
+    const nextStair = stairs[nextY];
+
+    if (!nextStair) {
+      clearInterval(climbInterval);
+      isAutoClimbing = false;
+      return;
+    }
+
+    // 필요한 방향 계산 (-1 또는 1)
+    const requiredDir = nextStair.x - player.x;
+    const needTurn = (requiredDir !== player.dir);
+
+    // 완벽한 방향 전환 및 스텝 실행
+    step(needTurn);
+    energy = MAX_ENERGY; // 러시 중 에너지 완전 보충
+
+    stepsLeft--;
+  }, 40); // 40ms 간격으로 고속 자동 등반
+}
+
+goldenRushBtn.addEventListener("click", triggerGoldenRush);
+
 window.addEventListener("keydown", (e) => {
+  if (isAutoClimbing) return; // 치트 진행 중 조작 방지
+
   if (listeningTarget) {
     e.preventDefault();
     const cleanLabel = e.key === " " ? "SPACE" : (e.key.length === 1 ? e.key.toUpperCase() : e.code.replace("Key", "").replace("Arrow", ""));
@@ -773,6 +847,7 @@ function renderCharacterRoster() {
     `;
 
     card.addEventListener("click", () => {
+      if (isAutoClimbing) return;
       currentSelectedChar = ch.id;
       renderCharacterRoster();
     });
@@ -799,7 +874,7 @@ function initGame() {
   let curDir = 1;
   let runLength = 3;
 
-  for (let i = 1; i < 120; i++) {
+  for (let i = 1; i < 180; i++) {
     if (runLength <= 0) {
       curDir = -curDir;
       runLength = Math.floor(Math.random() * 4) + 1;
@@ -878,6 +953,7 @@ const climbBtn = document.getElementById("btn-climb");
 const bindTouch = (btn, isTurn) => {
   const trigger = (e) => {
     e.preventDefault();
+    if (isAutoClimbing) return;
     if (gameState === "GAMEOVER") {
       initGame();
       gameState = "PLAY";
@@ -892,7 +968,7 @@ bindTouch(turnBtn, true);
 bindTouch(climbBtn, false);
 
 function update() {
-  if (gameState === "PLAY") {
+  if (gameState === "PLAY" && !isAutoClimbing) {
     const drain = 0.0036 + Math.min(score * 0.00008, 0.009);
     energy -= drain;
     if (energy <= 0) {
