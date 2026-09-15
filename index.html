@@ -25,7 +25,6 @@
       padding: 20px;
     }
 
-    /* 전체 레이아웃 래퍼: 게임기 본체 + 우측 기록표 */
     #game-container {
       display: flex;
       flex-direction: row;
@@ -36,7 +35,6 @@
       width: 100%;
     }
 
-    /* 모바일 프레임 */
     #mobile-frame {
       position: relative;
       width: 100vw;
@@ -192,7 +190,6 @@
       font-weight: bold;
     }
 
-    /* 우측 최근 20회 기록 보드 (여백 영역 배치) */
     #history-panel {
       width: 320px;
       height: 840px;
@@ -295,7 +292,6 @@
       line-height: 1.6;
     }
 
-    /* 반응형 레이아웃: 화면이 좁아지면 아래로 배치 */
     @media (max-width: 780px) {
       #game-container {
         flex-direction: column;
@@ -307,7 +303,6 @@
       }
     }
 
-    /* 설정 모달 */
     #settings-modal {
       position: absolute;
       top: 0;
@@ -380,7 +375,6 @@
 <body>
 
 <div id="game-container">
-  <!-- 모바일 게임기 본체 -->
   <div id="mobile-frame">
     <div id="top-bar">
       <div class="app-title">Cosmic Infinite Stairs</div>
@@ -404,7 +398,6 @@
 
     <div id="character-roster"></div>
 
-    <!-- 설정 모달 -->
     <div id="settings-modal">
       <div class="modal-box">
         <div class="modal-title">키 매핑 설정</div>
@@ -424,7 +417,6 @@
     </div>
   </div>
 
-  <!-- 여백 배치: 최근 20회 기록 패널 -->
   <div id="history-panel">
     <div class="panel-header">
       <span class="panel-title">🏆 RECENT 20 RUNS</span>
@@ -440,9 +432,7 @@
             <th style="width: 20%;">시간</th>
           </tr>
         </thead>
-        <tbody id="history-body">
-          <!-- 동적 렌더링 -->
-        </tbody>
+        <tbody id="history-body"></tbody>
       </table>
     </div>
   </div>
@@ -467,7 +457,6 @@ function playBeep(freq, type = "sine", duration = 0.04) {
   osc.stop(audioCtx.currentTime + duration);
 }
 
-// 투명화 완료 캐시
 const processedCanvases = {
   sheet8: null,
   among: null,
@@ -543,9 +532,6 @@ const characters = [
 ];
 let currentSelectedChar = "businessman";
 
-// ==========================================
-// 최근 20회 기록 로컬 스토리지 상태 관리
-// ==========================================
 let playHistory = [];
 try {
   const saved = localStorage.getItem("cosmic_stair_history");
@@ -613,11 +599,10 @@ document.getElementById("clear-history-btn").addEventListener("click", () => {
 const player = {
   x: 0,
   y: 0,
-  dir: 1,
+  dir: 1, // 1: 우측, -1: 좌측
   scaleX: 1,
   scaleY: 1,
-  bounceY: 0,
-  animFrame: 0
+  bounceY: 0
 };
 
 let stairs = [];
@@ -630,9 +615,14 @@ const spaceStars = Array.from({ length: 45 }, () => ({
   glowSpeed: Math.random() * 0.02 + 0.01
 }));
 
+// ==========================================
+// 시선 방향 고정 스프라이트 렌더러
+// ==========================================
 function drawPlayerSprite(x, y) {
   ctx.save();
   ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
+  
+  // 오직 player.dir에 의해서만 좌우 반전이 발생하도록 단일화
   ctx.scale(player.dir * player.scaleX, player.scaleY);
 
   ctx.fillStyle = "rgba(0, 242, 254, 0.25)";
@@ -642,7 +632,6 @@ function drawPlayerSprite(x, y) {
 
   const char = characters.find(c => c.id === currentSelectedChar) || characters[0];
   const src = processedCanvases[char.sourceKey];
-  const frame = player.animFrame % 2;
 
   if (src && (src.width || src.naturalWidth)) {
     const totalW = src.width || src.naturalWidth;
@@ -663,7 +652,9 @@ function drawPlayerSprite(x, y) {
       const padBottom = rawCellH * 0.04;
       const padX = rawCellW * 0.08;
 
-      const cellX = blockX + (frame === 0 ? rawCellW * 1 : rawCellW * 3);
+      // 시선 고정: 계단을 오를 때 반대 방향 시선 열(Column 3)을 번갈아 쓰지 않고,
+      // 한결같이 고정된 측면 프로필(Column 1)만을 일관되게 렌더링
+      const cellX = blockX + (rawCellW * 1);
       const cellY = blockY;
 
       sx = cellX + padX;
@@ -674,7 +665,8 @@ function drawPlayerSprite(x, y) {
     } else if (char.sourceKey === "pixel1" || char.sourceKey === "pixel2") {
       sw = totalW / 4;
       sh = totalH / 4;
-      sx = (frame * 2 + 1) * sw;
+      // 일관된 단일 측면 걷기 프레임 고정
+      sx = 1 * sw;
       sy = 2 * sh;
     } else if (char.sourceKey === "among") {
       sx = 0; sy = 0;
@@ -821,11 +813,10 @@ function initGame() {
 
   player.x = 0;
   player.y = 0;
-  player.dir = 1;
+  player.dir = 1; // 기본 우측 시선 고정
   player.scaleX = 1;
   player.scaleY = 1;
   player.bounceY = 0;
-  player.animFrame = 0;
 
   camX = 0;
   camY = 0;
@@ -845,6 +836,7 @@ function step(isTurn) {
   if (gameState === "READY") gameState = "PLAY";
   if (gameState !== "PLAY") return;
 
+  // 방향 전환 키를 누를 때만 dir 반전 (그 외에는 절대 방향 바뀌지 않음)
   if (isTurn) {
     player.dir = -player.dir;
   }
@@ -862,7 +854,7 @@ function step(isTurn) {
     }
     energy = Math.min(MAX_ENERGY, energy + 0.13);
 
-    player.animFrame = (player.animFrame + 1) % 2;
+    // 계단 착지 탄성 바운스만 작동하고, 시선 반전은 완전 억제
     player.bounceY = -7;
     player.scaleX = 0.92;
     player.scaleY = 1.12;
@@ -882,7 +874,6 @@ function step(isTurn) {
 function gameOver() {
   gameState = "GAMEOVER";
   playBeep(130, "sawtooth", 0.25);
-  // 게임 오버 시 최근 20회 기록에 자동 적재
   recordGameResult(score);
 }
 
@@ -1028,7 +1019,6 @@ function draw() {
   });
 }
 
-// 초기화 시동
 updateKeyLabels();
 renderCharacterRoster();
 renderHistoryTable();
