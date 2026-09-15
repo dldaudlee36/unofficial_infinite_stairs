@@ -599,7 +599,7 @@ document.getElementById("clear-history-btn").addEventListener("click", () => {
 const player = {
   x: 0,
   y: 0,
-  dir: 1, // 1: 우측, -1: 좌측
+  dir: 1, // 1: 우측 계단, -1: 좌측 계단
   scaleX: 1,
   scaleY: 1,
   bounceY: 0
@@ -616,14 +616,15 @@ const spaceStars = Array.from({ length: 45 }, () => ({
 }));
 
 // ==========================================
-// 시선 방향 고정 스프라이트 렌더러
+// 캐릭터 정면 시선 보정 스프라이트 렌더러
 // ==========================================
 function drawPlayerSprite(x, y) {
   ctx.save();
   ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
   
-  // 오직 player.dir에 의해서만 좌우 반전이 발생하도록 단일화
-  ctx.scale(player.dir * player.scaleX, player.scaleY);
+  // [핵심 교정]: 원본 시트 시선이 좌측이므로 -player.dir를 적용해야
+  // 우측(dir=1) 계단을 오를 때 캐릭터 얼굴이 계단 방향인 우측을 똑바로 바라봄
+  ctx.scale(-player.dir * player.scaleX, player.scaleY);
 
   ctx.fillStyle = "rgba(0, 242, 254, 0.25)";
   ctx.beginPath();
@@ -652,8 +653,6 @@ function drawPlayerSprite(x, y) {
       const padBottom = rawCellH * 0.04;
       const padX = rawCellW * 0.08;
 
-      // 시선 고정: 계단을 오를 때 반대 방향 시선 열(Column 3)을 번갈아 쓰지 않고,
-      // 한결같이 고정된 측면 프로필(Column 1)만을 일관되게 렌더링
       const cellX = blockX + (rawCellW * 1);
       const cellY = blockY;
 
@@ -665,7 +664,6 @@ function drawPlayerSprite(x, y) {
     } else if (char.sourceKey === "pixel1" || char.sourceKey === "pixel2") {
       sw = totalW / 4;
       sh = totalH / 4;
-      // 일관된 단일 측면 걷기 프레임 고정
       sx = 1 * sw;
       sy = 2 * sh;
     } else if (char.sourceKey === "among") {
@@ -813,7 +811,7 @@ function initGame() {
 
   player.x = 0;
   player.y = 0;
-  player.dir = 1; // 기본 우측 시선 고정
+  player.dir = 1;
   player.scaleX = 1;
   player.scaleY = 1;
   player.bounceY = 0;
@@ -836,7 +834,6 @@ function step(isTurn) {
   if (gameState === "READY") gameState = "PLAY";
   if (gameState !== "PLAY") return;
 
-  // 방향 전환 키를 누를 때만 dir 반전 (그 외에는 절대 방향 바뀌지 않음)
   if (isTurn) {
     player.dir = -player.dir;
   }
@@ -854,7 +851,6 @@ function step(isTurn) {
     }
     energy = Math.min(MAX_ENERGY, energy + 0.13);
 
-    // 계단 착지 탄성 바운스만 작동하고, 시선 반전은 완전 억제
     player.bounceY = -7;
     player.scaleX = 0.92;
     player.scaleY = 1.12;
