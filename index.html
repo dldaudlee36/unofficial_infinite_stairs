@@ -625,7 +625,7 @@ let targetCamY = 0;
 let isAutoClimbing = false;
 let isNormalMode = true;
 let boosterUsed = false;
-let currentProvocation = ""; // 현재 게임오버 도발 문구
+let currentProvocation = "";
 
 let reviveHearts = 0;
 let lastHeartThreshold = 0;
@@ -1000,7 +1000,6 @@ function getCharIcon(id) {
   return map[id] || "👤";
 }
 
-// 층수별 극딜 도발 문구 생성기
 function getProvocationText(currentScore, isBooster) {
   if (isBooster) {
     const boosterInsults = [
@@ -1203,7 +1202,7 @@ function step(isTurn) {
 
 function gameOver() {
   gameState = "GAMEOVER";
-  currentProvocation = getProvocationText(score, boosterUsed); // 도발 문구 결정
+  currentProvocation = getProvocationText(score, boosterUsed);
   playBeep(130, "sawtooth", 0.25);
   recordGameResult(score);
 }
@@ -1334,40 +1333,36 @@ function drawHUD() {
     // 1. GAME OVER 타이틀
     ctx.fillStyle = "#ff007f";
     ctx.font = "900 36px sans-serif";
-    ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 60);
+    ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 50);
 
     // 2. 점수 현황
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 18px monospace";
-    ctx.fillText(`SCORE: ${score} (BEST: ${highScore})`, canvas.width / 2, canvas.height / 2 - 18);
+    ctx.fillText(`SCORE: ${score} (BEST: ${highScore})`, canvas.width / 2, canvas.height / 2 - 10);
 
     // 3. 층수별 팩폭 도발 문구
     ctx.fillStyle = "#facc15";
     ctx.font = "bold 13px sans-serif";
     ctx.shadowColor = "#facc15";
     ctx.shadowBlur = 8;
-    ctx.fillText(`"${currentProvocation}"`, canvas.width / 2, canvas.height / 2 + 18);
+    ctx.fillText(`"${currentProvocation}"`, canvas.width / 2, canvas.height / 2 + 25);
 
-    // 4. 부스터 감지 / 클린 인증 배너
+    // 4. 부스터 사용 시에만 경고 출력 (미사용 시 클린 문구 완전 삭제)
+    let nextY = canvas.height / 2 + 65;
     if (boosterUsed) {
       ctx.fillStyle = "#ff0055";
       ctx.font = "bold 14px sans-serif";
       ctx.shadowColor = "#ff0055";
       ctx.shadowBlur = 12;
-      ctx.fillText("⚠️ 부스터 사용 감지됨, 꺼드럭 금지", canvas.width / 2, canvas.height / 2 + 50);
-    } else {
-      ctx.fillStyle = "rgb(250, 208, 41)";
-      ctx.font = "bold 14px sans-serif";
-      ctx.shadowColor = "rgb(250, 208, 41)";
-      ctx.shadowBlur = 12;
-      ctx.fillText("✨ 아주 클린한 기록이네요. 꺼드럭 쌉가능", canvas.width / 2, canvas.height / 2 + 50);
+      ctx.fillText("⚠️ 부스터 사용 감지됨, 꺼드럭 금지", canvas.width / 2, nextY);
+      nextY += 35;
     }
 
     // 5. 재시작 안내
     ctx.fillStyle = "#a855f7";
     ctx.font = "13px sans-serif";
     ctx.shadowBlur = 0;
-    ctx.fillText("버튼 터치 시 재시작", canvas.width / 2, canvas.height / 2 + 90);
+    ctx.fillText("버튼 터치 시 재시작", canvas.width / 2, nextY);
     ctx.restore();
 
   } else if (gameState === "REVIVE_COUNTDOWN") {
