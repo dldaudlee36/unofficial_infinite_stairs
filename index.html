@@ -1000,7 +1000,7 @@ function getCharIcon(id) {
   return map[id] || "👤";
 }
 
-// 층수별 극딜 도발 문구 생성기 (각 구간별 6개 풀 풀가동)
+// 층수 및 모드 정합성이 완벽히 보정된 도발 문구 생성기
 function getProvocationText(currentScore, isBooster) {
   if (isBooster) {
     const boosterInsults = [
@@ -1035,22 +1035,24 @@ function getProvocationText(currentScore, isBooster) {
     ];
     return list[Math.floor(Math.random() * list.length)];
   } else if (currentScore < 200) {
+    // 200층 미만이므로 하트 언급 절대 배제
     const list = [
       "딱 일반인 수준. 어디 가서 해봤다고 입 열지 마라.",
-      "100층 넘었다고 뿌듯했지? 갈 길 멀었다 애송아.",
-      "하트 하나 믿고 깝죽대다 장렬하게 꼬라박네.",
+      "100층 넘었다고 뿌듯했지? 200층 문턱도 못 밟네 애송이.",
       "겨우 세 자릿수 턱걸이하고 땀 삐질삐질 흘리는 꼴 보소.",
       "여기서 만족하고 입 찢어지지? 딱 네 그릇 크기다.",
-      "부활 하트 쳐먹고도 꼬라박는 거 보면 능지가 처참하다."
+      "200층 하트 구경도 못 해보고 로비로 사출당했죠? ㅋ",
+      "슬슬 속도 붙으니까 손가락 꼬여서 뇌정지 왔냐?"
     ];
     return list[Math.floor(Math.random() * list.length)];
   } else if (currentScore < 350) {
+    // 200층 이상: 실제로 하트가 지급되는 구간에 배치
     const list = [
+      "부활 하트 쳐먹고도 꼬라박는 거 보면 능지가 처참하다.",
+      "하트 하나 믿고 깝죽대더니 장렬하게 바닥 청소 엔딩.",
       "꺼드럭거릴 각 잡더니 꼴좋다. 딱 네 한계임.",
       "제법인데? 그래봤자 랭커 발끝도 못 미침.",
-      "손가락 꼬여서 뇌정지 온 거 훤히 보인다.",
       "제법 폼 잡더니 귀신같이 손가락 꼬여서 수직 낙하하네.",
-      "200층 넘었다고 꺼드럭거리더니 결국 바닥 청소 엔딩.",
       "벽 느껴지지? 응 너 같은 범재는 평생 가도 500층 못 봐."
     ];
     return list[Math.floor(Math.random() * list.length)];
