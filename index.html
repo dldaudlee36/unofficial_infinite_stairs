@@ -21,21 +21,38 @@
       min-height: 100vh;
       font-family: 'Segoe UI', Pretendard, sans-serif;
       color: #fff;
-      overflow: hidden;
+      overflow-x: hidden;
+      padding: 20px;
     }
+
+    /* 전체 레이아웃 래퍼: 게임기 본체 + 우측 기록표 */
+    #game-container {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      max-width: 820px;
+      width: 100%;
+    }
+
+    /* 모바일 프레임 */
     #mobile-frame {
       position: relative;
       width: 100vw;
-      max-width: 420px;
-      height: 100vh;
-      max-height: 880px;
+      max-width: 400px;
+      height: 840px;
+      max-height: 90vh;
       background: #08061a;
       border: 2px solid #2d1b54;
-      box-shadow: 0 0 40px rgba(138, 43, 226, 0.25);
+      border-radius: 16px;
+      box-shadow: 0 0 35px rgba(138, 43, 226, 0.25);
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      flex-shrink: 0;
     }
+
     #top-bar {
       height: 46px;
       background: #0d0926;
@@ -127,7 +144,7 @@
     }
 
     #character-roster {
-      height: 95px;
+      height: 90px;
       background: #05030f;
       border-top: 1px solid #231647;
       display: flex;
@@ -140,8 +157,8 @@
     }
     #character-roster::-webkit-scrollbar { display: none; }
     .char-card {
-      flex: 0 0 76px;
-      height: 78px;
+      flex: 0 0 72px;
+      height: 74px;
       background: #110d2b;
       border: 2px solid #372866;
       border-radius: 8px;
@@ -175,6 +192,122 @@
       font-weight: bold;
     }
 
+    /* 우측 최근 20회 기록 보드 (여백 영역 배치) */
+    #history-panel {
+      width: 320px;
+      height: 840px;
+      max-height: 90vh;
+      background: rgba(13, 9, 38, 0.75);
+      backdrop-filter: blur(12px);
+      border: 2px solid #2d1b54;
+      border-radius: 16px;
+      box-shadow: 0 0 30px rgba(0, 242, 254, 0.12);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .panel-header {
+      height: 46px;
+      background: #09061c;
+      border-bottom: 1px solid #2d1b54;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+    }
+    .panel-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #00f2fe;
+      letter-spacing: 0.5px;
+    }
+    .panel-clear-btn {
+      background: transparent;
+      border: 1px solid #ff007f;
+      color: #ff007f;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 3px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .panel-clear-btn:active {
+      background: #ff007f;
+      color: #fff;
+    }
+    .history-table-wrap {
+      flex: 1;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #7928ca transparent;
+    }
+    .history-table-wrap::-webkit-scrollbar {
+      width: 4px;
+    }
+    .history-table-wrap::-webkit-scrollbar-thumb {
+      background: #7928ca;
+      border-radius: 4px;
+    }
+    table.history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      text-align: left;
+    }
+    table.history-table th {
+      position: sticky;
+      top: 0;
+      background: #110d2b;
+      color: #a855f7;
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: bold;
+      border-bottom: 1px solid #2d1b54;
+      z-index: 1;
+    }
+    table.history-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(45, 27, 84, 0.4);
+      color: #e2e8f0;
+      font-family: monospace;
+    }
+    table.history-table tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    table.history-table tr:hover {
+      background: rgba(0, 242, 254, 0.08);
+    }
+    .score-badge {
+      font-weight: 800;
+      color: #00f2fe;
+    }
+    .score-badge.top {
+      color: #ff007f;
+      text-shadow: 0 0 8px rgba(255, 0, 127, 0.6);
+    }
+    .empty-state {
+      padding: 40px 16px;
+      text-align: center;
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    /* 반응형 레이아웃: 화면이 좁아지면 아래로 배치 */
+    @media (max-width: 780px) {
+      #game-container {
+        flex-direction: column;
+      }
+      #history-panel {
+        width: 100%;
+        max-width: 400px;
+        height: 380px;
+      }
+    }
+
+    /* 설정 모달 */
     #settings-modal {
       position: absolute;
       top: 0;
@@ -246,44 +379,71 @@
 </head>
 <body>
 
-<div id="mobile-frame">
-  <div id="top-bar">
-    <div class="app-title">Cosmic Infinite Stairs</div>
-    <button id="settings-btn">⚙️</button>
+<div id="game-container">
+  <!-- 모바일 게임기 본체 -->
+  <div id="mobile-frame">
+    <div id="top-bar">
+      <div class="app-title">Cosmic Infinite Stairs</div>
+      <button id="settings-btn">⚙️</button>
+    </div>
+
+    <div id="canvas-wrap">
+      <canvas id="gameCanvas" width="400" height="560"></canvas>
+    </div>
+    
+    <div id="touch-controller">
+      <button class="game-btn turn-btn" id="btn-turn">
+        방향 전환
+        <span class="sub-key" id="turn-key-label"></span>
+      </button>
+      <button class="game-btn" id="btn-climb">
+        오르기
+        <span class="sub-key" id="climb-key-label"></span>
+      </button>
+    </div>
+
+    <div id="character-roster"></div>
+
+    <!-- 설정 모달 -->
+    <div id="settings-modal">
+      <div class="modal-box">
+        <div class="modal-title">키 매핑 설정</div>
+        <div class="key-row">
+          <span>방향 전환 키:</span>
+          <button class="key-assign-btn" id="bind-turn-btn"></button>
+        </div>
+        <div class="key-row">
+          <span>오르기 키:</span>
+          <button class="key-assign-btn" id="bind-climb-btn"></button>
+        </div>
+        <div style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 8px;">
+          버튼을 누르고 변경할 키를 입력하세요.
+        </div>
+        <button class="modal-close-btn" id="close-modal-btn">설정 완료</button>
+      </div>
+    </div>
   </div>
 
-  <div id="canvas-wrap">
-    <canvas id="gameCanvas" width="400" height="560"></canvas>
-  </div>
-  
-  <div id="touch-controller">
-    <button class="game-btn turn-btn" id="btn-turn">
-      방향 전환
-      <span class="sub-key" id="turn-key-label"></span>
-    </button>
-    <button class="game-btn" id="btn-climb">
-      오르기
-      <span class="sub-key" id="climb-key-label"></span>
-    </button>
-  </div>
-
-  <div id="character-roster"></div>
-
-  <div id="settings-modal">
-    <div class="modal-box">
-      <div class="modal-title">키 매핑 설정</div>
-      <div class="key-row">
-        <span>방향 전환 키:</span>
-        <button class="key-assign-btn" id="bind-turn-btn"></button>
-      </div>
-      <div class="key-row">
-        <span>오르기 키:</span>
-        <button class="key-assign-btn" id="bind-climb-btn"></button>
-      </div>
-      <div style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 8px;">
-        버튼을 누르고 변경할 키를 입력하세요.
-      </div>
-      <button class="modal-close-btn" id="close-modal-btn">설정 완료</button>
+  <!-- 여백 배치: 최근 20회 기록 패널 -->
+  <div id="history-panel">
+    <div class="panel-header">
+      <span class="panel-title">🏆 RECENT 20 RUNS</span>
+      <button class="panel-clear-btn" id="clear-history-btn">초기화</button>
+    </div>
+    <div class="history-table-wrap">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th style="width: 15%;">#</th>
+            <th style="width: 40%;">캐릭터</th>
+            <th style="width: 25%;">기록</th>
+            <th style="width: 20%;">시간</th>
+          </tr>
+        </thead>
+        <tbody id="history-body">
+          <!-- 동적 렌더링 -->
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -307,9 +467,7 @@ function playBeep(freq, type = "sine", duration = 0.04) {
   osc.stop(audioCtx.currentTime + duration);
 }
 
-// ==========================================
-// 100% 완전 투명화 파이프라인 (비동기 프리로드 게이트)
-// ==========================================
+// 투명화 완료 캐시
 const processedCanvases = {
   sheet8: null,
   among: null,
@@ -331,29 +489,19 @@ function cleanAndProcessImage(url, key) {
       try {
         const imgData = octx.getImageData(0, 0, off.width, off.height);
         const d = imgData.data;
-
-        // 배경 투명화: 밝기(Luminance)와 RGB 임계치를 190까지 대폭 낮춰 외곽 노이즈 완전 박멸
         for (let i = 0; i < d.length; i += 4) {
-          const r = d[i];
-          const g = d[i + 1];
-          const b = d[i + 2];
-          // 회색빛 압축 찌꺼기 및 순백색 포함 조건
-          if (r > 190 && g > 190 && b > 190) {
+          if (d[i] > 190 && d[i + 1] > 190 && d[i + 2] > 190) {
             d[i + 3] = 0;
           }
         }
         octx.putImageData(imgData, 0, 0);
         processedCanvases[key] = off;
       } catch (err) {
-        console.error("CORS 보안으로 오프스크린 캔버스 처리 실패:", err);
         processedCanvases[key] = img;
       }
       resolve();
     };
-    img.onerror = () => {
-      console.error("이미지 로드 실패:", url);
-      resolve();
-    };
+    img.onerror = () => resolve();
     img.src = url;
   });
 }
@@ -395,6 +543,73 @@ const characters = [
 ];
 let currentSelectedChar = "businessman";
 
+// ==========================================
+// 최근 20회 기록 로컬 스토리지 상태 관리
+// ==========================================
+let playHistory = [];
+try {
+  const saved = localStorage.getItem("cosmic_stair_history");
+  if (saved) playHistory = JSON.parse(saved);
+} catch (e) {
+  playHistory = [];
+}
+
+function recordGameResult(finalScore) {
+  const charObj = characters.find(c => c.id === currentSelectedChar) || characters[0];
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  const entry = {
+    charIcon: getCharIcon(charObj.id),
+    charName: charObj.name,
+    score: finalScore,
+    time: timeStr
+  };
+
+  playHistory.unshift(entry);
+  if (playHistory.length > 20) {
+    playHistory.pop();
+  }
+
+  try {
+    localStorage.setItem("cosmic_stair_history", JSON.stringify(playHistory));
+  } catch (e) {}
+
+  renderHistoryTable();
+}
+
+function renderHistoryTable() {
+  const tbody = document.getElementById("history-body");
+  tbody.innerHTML = "";
+
+  if (playHistory.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">아직 플레이 기록이 없습니다.<br>계단을 올라 첫 기록을 세워보세요!</td></tr>`;
+    return;
+  }
+
+  const maxVal = Math.max(...playHistory.map(h => h.score));
+
+  playHistory.forEach((h, idx) => {
+    const tr = document.createElement("tr");
+    const isTop = h.score === maxVal && maxVal > 0;
+    tr.innerHTML = `
+      <td style="color: #64748b;">${idx + 1}</td>
+      <td>${h.charIcon} ${h.charName}</td>
+      <td><span class="score-badge ${isTop ? 'top' : ''}">${h.score}F</span></td>
+      <td style="color: #94a3b8; font-size: 11px;">${h.time}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById("clear-history-btn").addEventListener("click", () => {
+  if (confirm("최근 기록을 모두 초기화하시겠습니까?")) {
+    playHistory = [];
+    localStorage.removeItem("cosmic_stair_history");
+    renderHistoryTable();
+  }
+});
+
 const player = {
   x: 0,
   y: 0,
@@ -426,7 +641,6 @@ function drawPlayerSprite(x, y) {
   ctx.fill();
 
   const char = characters.find(c => c.id === currentSelectedChar) || characters[0];
-  // 원본 이미지가 아닌 반드시 투명 처리된 오프스크린 캔버스만 참조
   const src = processedCanvases[char.sourceKey];
   const frame = player.animFrame % 2;
 
@@ -445,7 +659,6 @@ function drawPlayerSprite(x, y) {
       const blockX = char.grid.col * blockW;
       const blockY = char.grid.row * blockH;
 
-      // 검은색 구분선 침범 방지 세이프 마진
       const padTop = rawCellH * 0.12;
       const padBottom = rawCellH * 0.04;
       const padX = rawCellW * 0.08;
@@ -484,7 +697,6 @@ function drawPlayerSprite(x, y) {
     ctx.drawImage(src, sx, sy, sw, sh, -drawW / 2, -drawH, drawW, drawH);
 
   } else {
-    // 배경 제거 작업 완료 전 대기용 실루엣
     ctx.fillStyle = "#00f2fe";
     ctx.fillRect(-16, -50, 32, 50);
   }
@@ -670,6 +882,8 @@ function step(isTurn) {
 function gameOver() {
   gameState = "GAMEOVER";
   playBeep(130, "sawtooth", 0.25);
+  // 게임 오버 시 최근 20회 기록에 자동 적재
+  recordGameResult(score);
 }
 
 const turnBtn = document.getElementById("btn-turn");
@@ -814,11 +1028,10 @@ function draw() {
   });
 }
 
-// ==========================================
-// 모든 이미지 투명화가 완료된 후 안전하게 게임 시작
-// ==========================================
+// 초기화 시동
 updateKeyLabels();
 renderCharacterRoster();
+renderHistoryTable();
 initGame();
 
 Promise.all([
