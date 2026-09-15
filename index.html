@@ -638,7 +638,6 @@ const keyBindings = {
 };
 let listeningTarget = null;
 
-// 바니걸에 전용 colOffset (0번째 열: 측면 앞모습 프로필) 지정
 const characters = [
   { id: "businessman", name: "비즈니스맨", sourceKey: "sheet8", grid: { col: 1, row: 2 } },
   { id: "boxer", name: "복서", sourceKey: "sheet8", grid: { col: 0, row: 1 } },
@@ -790,7 +789,6 @@ function drawPlayerSprite(x, y) {
       const padBottom = rawCellH * 0.04;
       const padX = rawCellW * 0.08;
 
-      // 캐릭터별 전용 열 오프셋이 정의되어 있으면 해당 열 사용, 기본은 1번 열
       const chosenCol = (char.colOffset !== undefined) ? char.colOffset : 1;
       const cellX = blockX + (rawCellW * chosenCol);
       const cellY = blockY;
@@ -1278,15 +1276,23 @@ function drawHUD() {
     ctx.font = "bold 18px monospace";
     ctx.fillText(`SCORE: ${score} (BEST: ${highScore})`, canvas.width / 2, canvas.height / 2 + 5);
 
+    // 부스터 사용 여부에 따른 분기 판정
+    ctx.save();
+    ctx.textAlign = "center";
     if (boosterUsed) {
-      ctx.save();
       ctx.fillStyle = "#ff0055";
-      ctx.font = "bold 15px sans-serif";
+      ctx.font = "bold 14px sans-serif";
       ctx.shadowColor = "#ff0055";
       ctx.shadowBlur = 12;
-      ctx.fillText("⚠️ 부스터 사용 감지됨, 꺼드럭 금지", canvas.width / 2, canvas.height / 2 + 40);
-      ctx.restore();
+      ctx.fillText("⚠️ 부스터 사용 감지됨, 꺼드럭 금지", canvas.width / 2, canvas.height / 2 + 38);
+    } else {
+      ctx.fillStyle = "rgb(250, 208, 41)";
+      ctx.font = "bold 14px sans-serif";
+      ctx.shadowColor = "rgb(250, 208, 41)";
+      ctx.shadowBlur = 12;
+      ctx.fillText("✨ 아주 클린한 기록이네요. 꺼드럭 쌉가능", canvas.width / 2, canvas.height / 2 + 38);
     }
+    ctx.restore();
 
     ctx.fillStyle = "#a855f7";
     ctx.font = "13px sans-serif";
