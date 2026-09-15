@@ -303,7 +303,6 @@
       }
     }
 
-    /* 설정 모달 */
     #settings-modal {
       position: absolute;
       top: 0;
@@ -361,7 +360,6 @@
     }
     @keyframes blink { 50% { opacity: 0.5; } }
 
-    /* 치트키 버튼: Golden Rush */
     #golden-rush-btn {
       width: 100%;
       background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%);
@@ -421,7 +419,6 @@
 
     <div id="character-roster"></div>
 
-    <!-- 설정 모달 -->
     <div id="settings-modal">
       <div class="modal-box">
         <div class="modal-title">키 매핑 & 치트 설정</div>
@@ -437,9 +434,7 @@
           버튼을 누르고 변경할 키를 입력하세요.
         </div>
         
-        <!-- 치트 버튼 -->
         <button id="golden-rush-btn">⚡ Golden Rush (+30F)</button>
-
         <button class="modal-close-btn" id="close-modal-btn">설정 완료</button>
       </div>
     </div>
@@ -483,6 +478,20 @@ function playBeep(freq, type = "sine", duration = 0.04) {
   gain.connect(audioCtx.destination);
   osc.start();
   osc.stop(audioCtx.currentTime + duration);
+}
+
+function playReviveSound() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+    setTimeout(() => playBeep(freq, "triangle", 0.08), i * 50);
+  });
+}
+
+function playHeartEarnSound() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  [600, 900].forEach((freq, i) => {
+    setTimeout(() => playBeep(freq, "sine", 0.06), i * 60);
+  });
 }
 
 const processedCanvases = {
@@ -539,7 +548,14 @@ let camY = 0;
 let targetCamX = 0;
 let targetCamY = 0;
 
-let isAutoClimbing = false; // 치트 가동 중 수동 조작 방지
+let isAutoClimbing = false;
+
+// 부활 및 하트 관리
+let reviveHearts = 0;
+let lastHeartThreshold = 0;
+let lastSafeStair = { x: 0, y: 0 };
+let countdownNumber = 3;
+let countdownTimer = null;
 
 const keyBindings = {
   turn: { code: "KeyZ", label: "Z" },
@@ -756,12 +772,8 @@ bindClimbBtn.addEventListener("click", () => {
   bindClimbBtn.innerText = "키 입력...";
 });
 
-// ==========================================
-// Golden Rush: 30층 자동 도약 치트 엔진
-// ==========================================
 function triggerGoldenRush() {
-  if (isAutoClimbing) return;
-  
+  if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
   settingsModal.style.display = "none";
   
   if (gameState === "GAMEOVER") {
@@ -779,7 +791,6 @@ function triggerGoldenRush() {
       return;
     }
 
-    // 다음 목표 계단의 위치 판별
     const nextY = player.y + 1;
     const nextStair = stairs[nextY];
 
@@ -789,22 +800,20 @@ function triggerGoldenRush() {
       return;
     }
 
-    // 필요한 방향 계산 (-1 또는 1)
     const requiredDir = nextStair.x - player.x;
     const needTurn = (requiredDir !== player.dir);
 
-    // 완벽한 방향 전환 및 스텝 실행
     step(needTurn);
-    energy = MAX_ENERGY; // 러시 중 에너지 완전 보충
+    energy = MAX_ENERGY;
 
     stepsLeft--;
-  }, 40); // 40ms 간격으로 고속 자동 등반
+  }, 40);
 }
 
 goldenRushBtn.addEventListener("click", triggerGoldenRush);
 
 window.addEventListener("keydown", (e) => {
-  if (isAutoClimbing) return; // 치트 진행 중 조작 방지
+  if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
 
   if (listeningTarget) {
     e.preventDefault();
@@ -847,7 +856,7 @@ function renderCharacterRoster() {
     `;
 
     card.addEventListener("click", () => {
-      if (isAutoClimbing) return;
+      if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
       currentSelectedChar = ch.id;
       renderCharacterRoster();
     });
@@ -866,15 +875,18 @@ function getCharIcon(id) {
 }
 
 function initGame() {
+  if (countdownTimer) clearInterval(countdownTimer);
   score = 0;
   energy = 1.0;
+  reviveHearts = 0;
+  lastHeartThreshold = 0;
   stairs = [{ x: 0, y: 0 }];
 
   let curX = 0;
   let curDir = 1;
   let runLength = 3;
 
-  for (let i = 1; i < 180; i++) {
+  for (let i = 1; i < 200; i++) {
     if (runLength <= 0) {
       curDir = -curDir;
       runLength = Math.floor(Math.random() * 4) + 1;
@@ -890,6 +902,7 @@ function initGame() {
   player.scaleX = 1;
   player.scaleY = 1;
   player.bounceY = 0;
+  lastSafeStair = { x: 0, y: 0 };
 
   camX = 0;
   camY = 0;
@@ -903,6 +916,60 @@ function appendNextStair() {
   let curDir = last.x - prev.x;
   if (Math.random() < 0.36) curDir = -curDir;
   stairs.push({ x: last.x + curDir, y: last.y + 1 });
+}
+
+// 200층마다 하트 지급 로직 적용
+function checkHeartReward() {
+  const currentThreshold = Math.floor(score / 200);
+  if (currentThreshold > lastHeartThreshold) {
+    const gained = currentThreshold - lastHeartThreshold;
+    reviveHearts += gained;
+    lastHeartThreshold = currentThreshold;
+    playHeartEarnSound();
+  }
+}
+
+function startReviveCountdown() {
+  gameState = "REVIVE_COUNTDOWN";
+  countdownNumber = 3;
+  energy = MAX_ENERGY;
+
+  playBeep(440, "sine", 0.08);
+
+  if (countdownTimer) clearInterval(countdownTimer);
+
+  countdownTimer = setInterval(() => {
+    countdownNumber--;
+    if (countdownNumber > 0) {
+      playBeep(440, "sine", 0.08);
+    } else if (countdownNumber === 0) {
+      playBeep(880, "triangle", 0.15);
+    } else {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+      energy = MAX_ENERGY;
+      gameState = "PLAY";
+    }
+  }, 1000);
+}
+
+function tryRevive() {
+  if (reviveHearts > 0) {
+    reviveHearts--;
+    player.x = lastSafeStair.x;
+    player.y = lastSafeStair.y;
+    player.bounceY = -12;
+    player.scaleX = 1.2;
+    player.scaleY = 0.8;
+
+    targetCamX = player.x * STAIR_W;
+    targetCamY = player.y * STAIR_H;
+
+    playReviveSound();
+    startReviveCountdown();
+    return true;
+  }
+  return false;
 }
 
 function step(isTurn) {
@@ -920,11 +987,14 @@ function step(isTurn) {
   if (expectedStair && expectedStair.x === nextTargetX) {
     player.x = nextTargetX;
     player.y = nextTargetY;
+    lastSafeStair = { x: player.x, y: player.y };
     score++;
     if (score > highScore) {
       highScore = score;
     }
     energy = Math.min(MAX_ENERGY, energy + 0.13);
+
+    checkHeartReward();
 
     player.bounceY = -7;
     player.scaleX = 0.92;
@@ -936,9 +1006,11 @@ function step(isTurn) {
     appendNextStair();
     playBeep(480 + (score % 16) * 18, "sine", 0.04);
   } else {
-    player.x = nextTargetX;
-    player.y = nextTargetY;
-    gameOver();
+    if (!tryRevive()) {
+      player.x = nextTargetX;
+      player.y = nextTargetY;
+      gameOver();
+    }
   }
 }
 
@@ -953,7 +1025,7 @@ const climbBtn = document.getElementById("btn-climb");
 const bindTouch = (btn, isTurn) => {
   const trigger = (e) => {
     e.preventDefault();
-    if (isAutoClimbing) return;
+    if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
     if (gameState === "GAMEOVER") {
       initGame();
       gameState = "PLAY";
@@ -972,8 +1044,10 @@ function update() {
     const drain = 0.0036 + Math.min(score * 0.00008, 0.009);
     energy -= drain;
     if (energy <= 0) {
-      energy = 0;
-      gameOver();
+      if (!tryRevive()) {
+        energy = 0;
+        gameOver();
+      }
     }
   }
 
@@ -1023,7 +1097,7 @@ function drawHUD() {
   const bw = 240;
   const bh = 12;
   const bx = (canvas.width - bw) / 2;
-  const by = 25;
+  const by = 20;
 
   ctx.fillStyle = "rgba(10, 8, 30, 0.8)";
   ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
@@ -1033,6 +1107,15 @@ function drawHUD() {
   const fillW = Math.max(0, bw * energy);
   ctx.fillStyle = energy > 0.3 ? "#00f2fe" : "#ff007f";
   ctx.fillRect(bx, by, fillW, bh);
+
+  ctx.save();
+  ctx.textAlign = "left";
+  ctx.font = "bold 15px monospace";
+  ctx.fillStyle = reviveHearts > 0 ? "#ff007f" : "#64748b";
+  ctx.shadowColor = reviveHearts > 0 ? "#ff007f" : "transparent";
+  ctx.shadowBlur = reviveHearts > 0 ? 8 : 0;
+  ctx.fillText(`❤️ x ${reviveHearts}`, bx, by + 30);
+  ctx.restore();
 
   ctx.save();
   ctx.font = "900 40px sans-serif";
@@ -1064,6 +1147,29 @@ function drawHUD() {
     ctx.fillStyle = "#a855f7";
     ctx.font = "13px sans-serif";
     ctx.fillText("버튼 터치 시 재시작", canvas.width / 2, canvas.height / 2 + 50);
+  } else if (gameState === "REVIVE_COUNTDOWN") {
+    ctx.fillStyle = "rgba(5, 3, 15, 0.78)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ff007f";
+    ctx.font = "bold 20px sans-serif";
+    ctx.shadowColor = "#ff007f";
+    ctx.shadowBlur = 12;
+    ctx.fillText("REVIVED!", canvas.width / 2, canvas.height / 2 - 60);
+
+    ctx.fillStyle = countdownNumber === 0 ? "#00f2fe" : "#ffd700";
+    ctx.shadowColor = countdownNumber === 0 ? "#00f2fe" : "#ffd700";
+    ctx.shadowBlur = 20;
+    ctx.font = "900 70px monospace";
+    ctx.fillText(countdownNumber === 0 ? "GO!" : countdownNumber, canvas.width / 2, canvas.height / 2 + 20);
+
+    ctx.font = "13px sans-serif";
+    ctx.fillStyle = "#94a3b8";
+    ctx.shadowBlur = 0;
+    ctx.fillText("준비하세요...", canvas.width / 2, canvas.height / 2 + 65);
+    ctx.restore();
   }
 }
 
