@@ -625,6 +625,7 @@ let targetCamY = 0;
 let isAutoClimbing = false;
 let isNormalMode = true;
 let boosterUsed = false;
+let currentProvocation = ""; // 현재 게임오버 도발 문구
 
 let reviveHearts = 0;
 let lastHeartThreshold = 0;
@@ -999,6 +1000,62 @@ function getCharIcon(id) {
   return map[id] || "👤";
 }
 
+// 층수별 극딜 도발 문구 생성기
+function getProvocationText(currentScore, isBooster) {
+  if (isBooster) {
+    const boosterInsults = [
+      "부스터 쳐쓰고 이 점수면 그냥 접어라.",
+      "치트키 딸깍거려놓고 꺼드럭대려고? 양심 터졌네.",
+      "날로 먹으려다 체했죠? 꼴좋다."
+    ];
+    return boosterInsults[Math.floor(Math.random() * boosterInsults.length)];
+  }
+
+  if (currentScore < 30) {
+    const list = [
+      "손가락에 깁스함? 발가락으로 눌러도 30층은 가겠다.",
+      "여기서 떨어지는 것도 진짜 재능이다.",
+      "키보드 왜 샀냐? 그냥 구경이나 해."
+    ];
+    return list[Math.floor(Math.random() * list.length)];
+  } else if (currentScore < 100) {
+    const list = [
+      "세 자릿수도 못 보고 컷당하는 꼬락서니 레전드.",
+      "겨우 여기까지 기어오고 꺼드럭거리려 했음?",
+      "뇌 반응 속도 실화냐? 렉 핑계 대지 마라."
+    ];
+    return list[Math.floor(Math.random() * list.length)];
+  } else if (currentScore < 200) {
+    const list = [
+      "딱 일반인 수준. 어디 가서 해봤다고 입 열지 마라.",
+      "100층 넘었다고 뿌듯했지? 갈 길 멀었다 애송아.",
+      "하트 하나 믿고 깝죽대다 장렬하게 꼬라박네."
+    ];
+    return list[Math.floor(Math.random() * list.length)];
+  } else if (currentScore < 350) {
+    const list = [
+      "꺼드럭거릴 각 잡더니 꼴좋다. 딱 네 한계임.",
+      "제법인데? 그래봤자 랭커 발끝도 못 미침.",
+      "손가락 꼬여서 뇌정지 온 거 훤히 보인다."
+    ];
+    return list[Math.floor(Math.random() * list.length)];
+  } else if (currentScore < 500) {
+    const list = [
+      "눈알 빠질 것 같지? 안 봐준다, 1층부터 다시 기어 와.",
+      "아깝지? 억울해 뒤지겠지? 샷건 치지 말고 다시 해.",
+      "집중력 밑천 드러났네. 한 판 더 해도 똑같음."
+    ];
+    return list[Math.floor(Math.random() * list.length)];
+  } else {
+    const list = [
+      "인생을 여기에 갈아 넣었네. 현생은 살고 있냐?",
+      "잘하긴 하는데 묘하게 꼴 보기 싫은 점수네.",
+      "손가락 쥐 난 거 뻔히 보이는데 추하게 가네."
+    ];
+    return list[Math.floor(Math.random() * list.length)];
+  }
+}
+
 function initGame() {
   if (countdownTimer) clearInterval(countdownTimer);
   score = 0;
@@ -1006,6 +1063,7 @@ function initGame() {
   reviveHearts = 0;
   lastHeartThreshold = 0;
   boosterUsed = false;
+  currentProvocation = "";
   stairs = [{ x: 0, y: 0 }];
 
   let curX = 0;
@@ -1145,6 +1203,7 @@ function step(isTurn) {
 
 function gameOver() {
   gameState = "GAMEOVER";
+  currentProvocation = getProvocationText(score, boosterUsed); // 도발 문구 결정
   playBeep(130, "sawtooth", 0.25);
   recordGameResult(score);
 }
@@ -1268,35 +1327,49 @@ function drawHUD() {
   } else if (gameState === "GAMEOVER") {
     ctx.fillStyle = "rgba(10, 5, 20, 0.88)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#ff007f";
-    ctx.font = "900 36px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 40);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 18px monospace";
-    ctx.fillText(`SCORE: ${score} (BEST: ${highScore})`, canvas.width / 2, canvas.height / 2 + 5);
-
-    // 부스터 사용 여부에 따른 분기 판정
+    
     ctx.save();
     ctx.textAlign = "center";
+
+    // 1. GAME OVER 타이틀
+    ctx.fillStyle = "#ff007f";
+    ctx.font = "900 36px sans-serif";
+    ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 60);
+
+    // 2. 점수 현황
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 18px monospace";
+    ctx.fillText(`SCORE: ${score} (BEST: ${highScore})`, canvas.width / 2, canvas.height / 2 - 18);
+
+    // 3. 층수별 팩폭 도발 문구
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 13px sans-serif";
+    ctx.shadowColor = "#facc15";
+    ctx.shadowBlur = 8;
+    ctx.fillText(`"${currentProvocation}"`, canvas.width / 2, canvas.height / 2 + 18);
+
+    // 4. 부스터 감지 / 클린 인증 배너
     if (boosterUsed) {
       ctx.fillStyle = "#ff0055";
       ctx.font = "bold 14px sans-serif";
       ctx.shadowColor = "#ff0055";
       ctx.shadowBlur = 12;
-      ctx.fillText("⚠️ 부스터 사용 감지됨, 꺼드럭 금지", canvas.width / 2, canvas.height / 2 + 38);
+      ctx.fillText("⚠️ 부스터 사용 감지됨, 꺼드럭 금지", canvas.width / 2, canvas.height / 2 + 50);
     } else {
       ctx.fillStyle = "rgb(250, 208, 41)";
       ctx.font = "bold 14px sans-serif";
       ctx.shadowColor = "rgb(250, 208, 41)";
       ctx.shadowBlur = 12;
-      ctx.fillText("✨ 아주 클린한 기록이네요. 꺼드럭 쌉가능", canvas.width / 2, canvas.height / 2 + 38);
+      ctx.fillText("✨ 아주 클린한 기록이네요. 꺼드럭 쌉가능", canvas.width / 2, canvas.height / 2 + 50);
     }
-    ctx.restore();
 
+    // 5. 재시작 안내
     ctx.fillStyle = "#a855f7";
     ctx.font = "13px sans-serif";
-    ctx.fillText("버튼 터치 시 재시작", canvas.width / 2, canvas.height / 2 + 75);
+    ctx.shadowBlur = 0;
+    ctx.fillText("버튼 터치 시 재시작", canvas.width / 2, canvas.height / 2 + 90);
+    ctx.restore();
+
   } else if (gameState === "REVIVE_COUNTDOWN") {
     ctx.fillStyle = "rgba(5, 3, 15, 0.78)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
