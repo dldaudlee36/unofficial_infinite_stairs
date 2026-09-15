@@ -174,6 +174,7 @@
       padding: 0 14px;
       overflow-x: auto;
       scrollbar-width: none;
+      scroll-behavior: smooth;
       z-index: 10;
     }
     #character-roster::-webkit-scrollbar { display: none; }
@@ -213,6 +214,7 @@
       font-weight: bold;
     }
 
+    /* 기록 보드 및 모드별 탭 */
     #history-panel {
       width: 320px;
       height: 840px;
@@ -257,15 +259,43 @@
       background: #ff007f;
       color: #fff;
     }
+
+    /* 모드 탭 바 */
+    .history-tab-bar {
+      display: flex;
+      background: #0d0926;
+      border-bottom: 1px solid #2d1b54;
+    }
+    .history-tab-btn {
+      flex: 1;
+      padding: 8px 0;
+      background: transparent;
+      border: none;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border-bottom: 2px solid transparent;
+    }
+    .history-tab-btn.active.normal {
+      color: #00f2fe;
+      border-bottom-color: #00f2fe;
+      background: rgba(0, 242, 254, 0.05);
+    }
+    .history-tab-btn.active.hardcore {
+      color: #ff007f;
+      border-bottom-color: #ff007f;
+      background: rgba(255, 0, 127, 0.05);
+    }
+
     .history-table-wrap {
       flex: 1;
       overflow-y: auto;
       scrollbar-width: thin;
       scrollbar-color: #7928ca transparent;
     }
-    .history-table-wrap::-webkit-scrollbar {
-      width: 4px;
-    }
+    .history-table-wrap::-webkit-scrollbar { width: 4px; }
     .history-table-wrap::-webkit-scrollbar-thumb {
       background: #7928ca;
       border-radius: 4px;
@@ -293,12 +323,8 @@
       color: #e2e8f0;
       font-family: monospace;
     }
-    table.history-table tr:nth-child(even) {
-      background: rgba(255, 255, 255, 0.02);
-    }
-    table.history-table tr:hover {
-      background: rgba(0, 242, 254, 0.08);
-    }
+    table.history-table tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+    table.history-table tr:hover { background: rgba(0, 242, 254, 0.08); }
     .score-badge {
       font-weight: 800;
       color: #00f2fe;
@@ -316,9 +342,7 @@
     }
 
     @media (max-width: 780px) {
-      #game-container {
-        flex-direction: column;
-      }
+      #game-container { flex-direction: column; }
       #history-panel {
         width: 100%;
         max-width: 400px;
@@ -326,7 +350,6 @@
       }
     }
 
-    /* 설정 모달 */
     #settings-modal {
       position: absolute;
       top: 0;
@@ -384,7 +407,6 @@
     }
     @keyframes blink { 50% { opacity: 0.5; } }
 
-    /* 모드 전환 토글 버튼 */
     #mode-toggle-btn {
       width: 100%;
       background: #161038;
@@ -482,9 +504,7 @@
           버튼을 누르고 변경할 키를 입력하세요.
         </div>
         
-        <!-- 일반인 모드 / 꺼드럭 모드 전환 스위치 -->
         <button id="mode-toggle-btn">🎮 모드: 일반인 모드 (하트 ON)</button>
-        
         <button id="golden-rush-btn">⚡ Golden Rush (+30F)</button>
         <button class="modal-close-btn" id="close-modal-btn">설정 완료</button>
       </div>
@@ -496,6 +516,13 @@
       <span class="panel-title">🏆 RECENT 20 RUNS</span>
       <button class="panel-clear-btn" id="clear-history-btn">초기화</button>
     </div>
+
+    <!-- 모드별 기록 분리 탭 -->
+    <div class="history-tab-bar">
+      <button class="history-tab-btn active normal" id="tab-normal">일반인 모드</button>
+      <button class="history-tab-btn hardcore" id="tab-hardcore">꺼드럭 모드</button>
+    </div>
+
     <div class="history-table-wrap">
       <table class="history-table">
         <thead>
@@ -600,9 +627,10 @@ let targetCamX = 0;
 let targetCamY = 0;
 
 let isAutoClimbing = false;
-
-// 모드 상태: true면 '일반인 모드', false면 '꺼드럭 모드'
 let isNormalMode = true;
+
+// 부스터 사용 감지 플래그
+let boosterUsed = false;
 
 // 부활 및 하트 관리
 let reviveHearts = 0;
@@ -632,9 +660,13 @@ const characters = [
 ];
 let currentSelectedChar = "businessman";
 
+// ==========================================
+// 모드별 분리 기록 관리
+// ==========================================
+let currentViewTab = "normal"; // 'normal' 또는 'hardcore'
 let playHistory = [];
 try {
-  const saved = localStorage.getItem("cosmic_stair_history");
+  const saved = localStorage.getItem("cosmic_stair_history_v2");
   if (saved) playHistory = JSON.parse(saved);
 } catch (e) {
   playHistory = [];
@@ -646,6 +678,7 @@ function recordGameResult(finalScore) {
   const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
   const entry = {
+    mode: isNormalMode ? "normal" : "hardcore",
     charIcon: getCharIcon(charObj.id),
     charName: charObj.name,
     score: finalScore,
@@ -653,12 +686,12 @@ function recordGameResult(finalScore) {
   };
 
   playHistory.unshift(entry);
-  if (playHistory.length > 20) {
+  if (playHistory.length > 50) {
     playHistory.pop();
   }
 
   try {
-    localStorage.setItem("cosmic_stair_history", JSON.stringify(playHistory));
+    localStorage.setItem("cosmic_stair_history_v2", JSON.stringify(playHistory));
   } catch (e) {}
 
   renderHistoryTable();
@@ -668,14 +701,17 @@ function renderHistoryTable() {
   const tbody = document.getElementById("history-body");
   tbody.innerHTML = "";
 
-  if (playHistory.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">아직 플레이 기록이 없습니다.<br>계단을 올라 첫 기록을 세워보세요!</td></tr>`;
+  // 현재 탭에 해당하는 모드 기록만 필터링 (최대 20개)
+  const filtered = playHistory.filter(h => h.mode === currentViewTab).slice(0, 20);
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">[${currentViewTab === 'normal' ? '일반인 모드' : '꺼드럭 모드'}] 기록이 없습니다.<br>계단을 올라 첫 랭킹을 달성하세요!</td></tr>`;
     return;
   }
 
-  const maxVal = Math.max(...playHistory.map(h => h.score));
+  const maxVal = Math.max(...filtered.map(h => h.score));
 
-  playHistory.forEach((h, idx) => {
+  filtered.forEach((h, idx) => {
     const tr = document.createElement("tr");
     const isTop = h.score === maxVal && maxVal > 0;
     tr.innerHTML = `
@@ -688,10 +724,28 @@ function renderHistoryTable() {
   });
 }
 
+// 탭 스위칭 바인딩
+const tabNormalBtn = document.getElementById("tab-normal");
+const tabHardcoreBtn = document.getElementById("tab-hardcore");
+
+tabNormalBtn.addEventListener("click", () => {
+  currentViewTab = "normal";
+  tabNormalBtn.className = "history-tab-btn active normal";
+  tabHardcoreBtn.className = "history-tab-btn hardcore";
+  renderHistoryTable();
+});
+
+tabHardcoreBtn.addEventListener("click", () => {
+  currentViewTab = "hardcore";
+  tabHardcoreBtn.className = "history-tab-btn active hardcore";
+  tabNormalBtn.className = "history-tab-btn normal";
+  renderHistoryTable();
+});
+
 document.getElementById("clear-history-btn").addEventListener("click", () => {
-  if (confirm("최근 기록을 모두 초기화하시겠습니까?")) {
-    playHistory = [];
-    localStorage.removeItem("cosmic_stair_history");
+  if (confirm(`현재 탭 [${currentViewTab === 'normal' ? '일반인 모드' : '꺼드럭 모드'}] 기록을 모두 초기화하시겠습니까?`)) {
+    playHistory = playHistory.filter(h => h.mode !== currentViewTab);
+    localStorage.setItem("cosmic_stair_history_v2", JSON.stringify(playHistory));
     renderHistoryTable();
   }
 });
@@ -804,7 +858,6 @@ const goldenRushBtn = document.getElementById("golden-rush-btn");
 const modeToggleBtn = document.getElementById("mode-toggle-btn");
 const modeBadge = document.getElementById("mode-badge");
 
-// 모드 토글 업데이트 함수
 function updateModeUI() {
   if (isNormalMode) {
     modeBadge.innerText = "일반인 모드";
@@ -822,7 +875,7 @@ function updateModeUI() {
 modeToggleBtn.addEventListener("click", () => {
   isNormalMode = !isNormalMode;
   updateModeUI();
-  initGame(); // 공정한 룰 적용을 위해 게임 초기화
+  initGame();
 });
 
 settingsBtn.addEventListener("click", () => {
@@ -849,6 +902,7 @@ bindClimbBtn.addEventListener("click", () => {
   bindClimbBtn.innerText = "키 입력...";
 });
 
+// 부스터 실행 시 감지 플래그 설정
 function triggerGoldenRush() {
   if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
   settingsModal.style.display = "none";
@@ -858,6 +912,7 @@ function triggerGoldenRush() {
   }
   gameState = "PLAY";
   isAutoClimbing = true;
+  boosterUsed = true; // 치트/부스터 사용 감지
 
   let stepsLeft = 30;
 
@@ -917,9 +972,14 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+const rosterContainer = document.getElementById("character-roster");
+rosterContainer.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  rosterContainer.scrollLeft += e.deltaY * 0.9;
+}, { passive: false });
+
 function renderCharacterRoster() {
-  const roster = document.getElementById("character-roster");
-  roster.innerHTML = "";
+  rosterContainer.innerHTML = "";
 
   characters.forEach(ch => {
     const isSelected = ch.id === currentSelectedChar;
@@ -938,7 +998,7 @@ function renderCharacterRoster() {
       renderCharacterRoster();
     });
 
-    roster.appendChild(card);
+    rosterContainer.appendChild(card);
   });
 }
 
@@ -957,6 +1017,7 @@ function initGame() {
   energy = 1.0;
   reviveHearts = 0;
   lastHeartThreshold = 0;
+  boosterUsed = false; // 플래그 초기화
   stairs = [{ x: 0, y: 0 }];
 
   let curX = 0;
@@ -995,9 +1056,8 @@ function appendNextStair() {
   stairs.push({ x: last.x + curDir, y: last.y + 1 });
 }
 
-// 200층마다 하트 지급 (일반인 모드 전용)
 function checkHeartReward() {
-  if (!isNormalMode) return; // 꺼드럭 모드에서는 하트 지급 원천 차단
+  if (!isNormalMode) return;
 
   const currentThreshold = Math.floor(score / 200);
   if (currentThreshold > lastHeartThreshold) {
@@ -1033,7 +1093,6 @@ function startReviveCountdown() {
 }
 
 function tryRevive() {
-  // 꺼드럭 모드에서는 부활 불가
   if (!isNormalMode) return false;
 
   if (reviveHearts > 0) {
@@ -1190,7 +1249,6 @@ function drawHUD() {
   ctx.fillStyle = energy > 0.3 ? "#00f2fe" : "#ff007f";
   ctx.fillRect(bx, by, fillW, bh);
 
-  // 일반인 모드일 때만 하트 HUD 노출
   if (isNormalMode) {
     ctx.save();
     ctx.textAlign = "left";
@@ -1220,18 +1278,30 @@ function drawHUD() {
     ctx.font = "14px sans-serif";
     ctx.fillText("하단 버튼 또는 키를 눌러 출발!", canvas.width / 2, canvas.height / 2 + 15);
   } else if (gameState === "GAMEOVER") {
-    ctx.fillStyle = "rgba(10, 5, 20, 0.85)";
+    ctx.fillStyle = "rgba(10, 5, 20, 0.88)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#ff007f";
     ctx.font = "900 36px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 30);
+    ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 40);
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 18px monospace";
-    ctx.fillText(`SCORE: ${score} (BEST: ${highScore})`, canvas.width / 2, canvas.height / 2 + 15);
+    ctx.fillText(`SCORE: ${score} (BEST: ${highScore})`, canvas.width / 2, canvas.height / 2 + 5);
+
+    // 부스터 감지 경고 문구 출력
+    if (boosterUsed) {
+      ctx.save();
+      ctx.fillStyle = "#ff0055";
+      ctx.font = "bold 15px sans-serif";
+      ctx.shadowColor = "#ff0055";
+      ctx.shadowBlur = 12;
+      ctx.fillText("⚠️ 부스터 사용 감지됨, 꺼드럭 금지", canvas.width / 2, canvas.height / 2 + 40);
+      ctx.restore();
+    }
+
     ctx.fillStyle = "#a855f7";
     ctx.font = "13px sans-serif";
-    ctx.fillText("버튼 터치 시 재시작", canvas.width / 2, canvas.height / 2 + 50);
+    ctx.fillText("버튼 터치 시 재시작", canvas.width / 2, canvas.height / 2 + 75);
   } else if (gameState === "REVIVE_COUNTDOWN") {
     ctx.fillStyle = "rgba(5, 3, 15, 0.78)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
