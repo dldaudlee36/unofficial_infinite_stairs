@@ -61,13 +61,36 @@
       padding: 0 16px;
       z-index: 20;
     }
+    .title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
     .app-title {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 900;
-      letter-spacing: 1px;
+      letter-spacing: 0.5px;
       color: #a855f7;
       text-transform: uppercase;
     }
+    .mode-badge {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 6px;
+      letter-spacing: 0;
+    }
+    .mode-badge.normal {
+      background: rgba(0, 242, 254, 0.15);
+      color: #00f2fe;
+      border: 1px solid #00f2fe;
+    }
+    .mode-badge.hardcore {
+      background: rgba(255, 0, 127, 0.15);
+      color: #ff007f;
+      border: 1px solid #ff007f;
+    }
+
     #settings-btn {
       background: #161038;
       border: 1px solid #7928ca;
@@ -303,6 +326,7 @@
       }
     }
 
+    /* 설정 모달 */
     #settings-modal {
       position: absolute;
       top: 0;
@@ -337,7 +361,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
       font-size: 14px;
     }
     .key-assign-btn {
@@ -360,15 +384,35 @@
     }
     @keyframes blink { 50% { opacity: 0.5; } }
 
+    /* 모드 전환 토글 버튼 */
+    #mode-toggle-btn {
+      width: 100%;
+      background: #161038;
+      border: 2px solid #00f2fe;
+      color: #00f2fe;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 6px;
+      transition: all 0.2s ease;
+    }
+    #mode-toggle-btn.hardcore {
+      border-color: #ff007f;
+      color: #ff007f;
+      background: #26091c;
+    }
+
     #golden-rush-btn {
       width: 100%;
       background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%);
       border: 2px solid #fffb00;
       color: #05030e;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 900;
       letter-spacing: 1px;
-      padding: 10px;
+      padding: 9px;
       border-radius: 8px;
       cursor: pointer;
       margin-top: 8px;
@@ -398,7 +442,10 @@
 <div id="game-container">
   <div id="mobile-frame">
     <div id="top-bar">
-      <div class="app-title">Cosmic Infinite Stairs</div>
+      <div class="title-wrap">
+        <div class="app-title">Cosmic Infinite Stairs</div>
+        <span class="mode-badge normal" id="mode-badge">일반인 모드</span>
+      </div>
       <button id="settings-btn">⚙️</button>
     </div>
 
@@ -419,9 +466,10 @@
 
     <div id="character-roster"></div>
 
+    <!-- 설정 모달 -->
     <div id="settings-modal">
       <div class="modal-box">
-        <div class="modal-title">키 매핑 & 치트 설정</div>
+        <div class="modal-title">설정 & 치트</div>
         <div class="key-row">
           <span>방향 전환 키:</span>
           <button class="key-assign-btn" id="bind-turn-btn"></button>
@@ -430,9 +478,12 @@
           <span>오르기 키:</span>
           <button class="key-assign-btn" id="bind-climb-btn"></button>
         </div>
-        <div style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 4px;">
+        <div style="font-size: 11px; color: #94a3b8; text-align: center; margin-bottom: 8px;">
           버튼을 누르고 변경할 키를 입력하세요.
         </div>
+        
+        <!-- 일반인 모드 / 꺼드럭 모드 전환 스위치 -->
+        <button id="mode-toggle-btn">🎮 모드: 일반인 모드 (하트 ON)</button>
         
         <button id="golden-rush-btn">⚡ Golden Rush (+30F)</button>
         <button class="modal-close-btn" id="close-modal-btn">설정 완료</button>
@@ -549,6 +600,9 @@ let targetCamX = 0;
 let targetCamY = 0;
 
 let isAutoClimbing = false;
+
+// 모드 상태: true면 '일반인 모드', false면 '꺼드럭 모드'
+let isNormalMode = true;
 
 // 부활 및 하트 관리
 let reviveHearts = 0;
@@ -747,6 +801,29 @@ const closeModalBtn = document.getElementById("close-modal-btn");
 const bindTurnBtn = document.getElementById("bind-turn-btn");
 const bindClimbBtn = document.getElementById("bind-climb-btn");
 const goldenRushBtn = document.getElementById("golden-rush-btn");
+const modeToggleBtn = document.getElementById("mode-toggle-btn");
+const modeBadge = document.getElementById("mode-badge");
+
+// 모드 토글 업데이트 함수
+function updateModeUI() {
+  if (isNormalMode) {
+    modeBadge.innerText = "일반인 모드";
+    modeBadge.className = "mode-badge normal";
+    modeToggleBtn.innerText = "🎮 모드: 일반인 모드 (하트 ON)";
+    modeToggleBtn.className = "";
+  } else {
+    modeBadge.innerText = "꺼드럭 모드";
+    modeBadge.className = "mode-badge hardcore";
+    modeToggleBtn.innerText = "💀 모드: 꺼드럭 모드 (하트 OFF)";
+    modeToggleBtn.className = "hardcore";
+  }
+}
+
+modeToggleBtn.addEventListener("click", () => {
+  isNormalMode = !isNormalMode;
+  updateModeUI();
+  initGame(); // 공정한 룰 적용을 위해 게임 초기화
+});
 
 settingsBtn.addEventListener("click", () => {
   settingsModal.style.display = "flex";
@@ -918,8 +995,10 @@ function appendNextStair() {
   stairs.push({ x: last.x + curDir, y: last.y + 1 });
 }
 
-// 200층마다 하트 지급 로직 적용
+// 200층마다 하트 지급 (일반인 모드 전용)
 function checkHeartReward() {
+  if (!isNormalMode) return; // 꺼드럭 모드에서는 하트 지급 원천 차단
+
   const currentThreshold = Math.floor(score / 200);
   if (currentThreshold > lastHeartThreshold) {
     const gained = currentThreshold - lastHeartThreshold;
@@ -954,6 +1033,9 @@ function startReviveCountdown() {
 }
 
 function tryRevive() {
+  // 꺼드럭 모드에서는 부활 불가
+  if (!isNormalMode) return false;
+
   if (reviveHearts > 0) {
     reviveHearts--;
     player.x = lastSafeStair.x;
@@ -1108,14 +1190,17 @@ function drawHUD() {
   ctx.fillStyle = energy > 0.3 ? "#00f2fe" : "#ff007f";
   ctx.fillRect(bx, by, fillW, bh);
 
-  ctx.save();
-  ctx.textAlign = "left";
-  ctx.font = "bold 15px monospace";
-  ctx.fillStyle = reviveHearts > 0 ? "#ff007f" : "#64748b";
-  ctx.shadowColor = reviveHearts > 0 ? "#ff007f" : "transparent";
-  ctx.shadowBlur = reviveHearts > 0 ? 8 : 0;
-  ctx.fillText(`❤️ x ${reviveHearts}`, bx, by + 30);
-  ctx.restore();
+  // 일반인 모드일 때만 하트 HUD 노출
+  if (isNormalMode) {
+    ctx.save();
+    ctx.textAlign = "left";
+    ctx.font = "bold 15px monospace";
+    ctx.fillStyle = reviveHearts > 0 ? "#ff007f" : "#64748b";
+    ctx.shadowColor = reviveHearts > 0 ? "#ff007f" : "transparent";
+    ctx.shadowBlur = reviveHearts > 0 ? 8 : 0;
+    ctx.fillText(`❤️ x ${reviveHearts}`, bx, by + 30);
+    ctx.restore();
+  }
 
   ctx.save();
   ctx.font = "900 40px sans-serif";
@@ -1197,6 +1282,7 @@ function draw() {
   });
 }
 
+updateModeUI();
 updateKeyLabels();
 renderCharacterRoster();
 renderHistoryTable();
