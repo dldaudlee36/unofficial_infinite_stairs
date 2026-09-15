@@ -214,7 +214,6 @@
       font-weight: bold;
     }
 
-    /* 기록 보드 및 모드별 탭 */
     #history-panel {
       width: 320px;
       height: 840px;
@@ -260,7 +259,6 @@
       color: #fff;
     }
 
-    /* 모드 탭 바 */
     .history-tab-bar {
       display: flex;
       background: #0d0926;
@@ -488,7 +486,6 @@
 
     <div id="character-roster"></div>
 
-    <!-- 설정 모달 -->
     <div id="settings-modal">
       <div class="modal-box">
         <div class="modal-title">설정 & 치트</div>
@@ -517,7 +514,6 @@
       <button class="panel-clear-btn" id="clear-history-btn">초기화</button>
     </div>
 
-    <!-- 모드별 기록 분리 탭 -->
     <div class="history-tab-bar">
       <button class="history-tab-btn active normal" id="tab-normal">일반인 모드</button>
       <button class="history-tab-btn hardcore" id="tab-hardcore">꺼드럭 모드</button>
@@ -628,11 +624,8 @@ let targetCamY = 0;
 
 let isAutoClimbing = false;
 let isNormalMode = true;
-
-// 부스터 사용 감지 플래그
 let boosterUsed = false;
 
-// 부활 및 하트 관리
 let reviveHearts = 0;
 let lastHeartThreshold = 0;
 let lastSafeStair = { x: 0, y: 0 };
@@ -645,6 +638,7 @@ const keyBindings = {
 };
 let listeningTarget = null;
 
+// 바니걸에 전용 colOffset (0번째 열: 측면 앞모습 프로필) 지정
 const characters = [
   { id: "businessman", name: "비즈니스맨", sourceKey: "sheet8", grid: { col: 1, row: 2 } },
   { id: "boxer", name: "복서", sourceKey: "sheet8", grid: { col: 0, row: 1 } },
@@ -653,17 +647,14 @@ const characters = [
   { id: "sheriff", name: "보안관", sourceKey: "sheet8", grid: { col: 1, row: 1 } },
   { id: "tennis", name: "테니스선수", sourceKey: "sheet8", grid: { col: 0, row: 2 } },
   { id: "soldier", name: "근위병", sourceKey: "sheet8", grid: { col: 0, row: 0 } },
-  { id: "bunny", name: "바니걸", sourceKey: "sheet8", grid: { col: 1, row: 0 } },
+  { id: "bunny", name: "바니걸", sourceKey: "sheet8", grid: { col: 1, row: 0 }, colOffset: 0 },
   { id: "among", name: "어몽어스", sourceKey: "among" },
   { id: "redboy", name: "빨간티소년", sourceKey: "pixel1" },
   { id: "redhair", name: "붉은머리소년", sourceKey: "pixel2" }
 ];
 let currentSelectedChar = "businessman";
 
-// ==========================================
-// 모드별 분리 기록 관리
-// ==========================================
-let currentViewTab = "normal"; // 'normal' 또는 'hardcore'
+let currentViewTab = "normal";
 let playHistory = [];
 try {
   const saved = localStorage.getItem("cosmic_stair_history_v2");
@@ -701,7 +692,6 @@ function renderHistoryTable() {
   const tbody = document.getElementById("history-body");
   tbody.innerHTML = "";
 
-  // 현재 탭에 해당하는 모드 기록만 필터링 (최대 20개)
   const filtered = playHistory.filter(h => h.mode === currentViewTab).slice(0, 20);
 
   if (filtered.length === 0) {
@@ -724,7 +714,6 @@ function renderHistoryTable() {
   });
 }
 
-// 탭 스위칭 바인딩
 const tabNormalBtn = document.getElementById("tab-normal");
 const tabHardcoreBtn = document.getElementById("tab-hardcore");
 
@@ -801,7 +790,9 @@ function drawPlayerSprite(x, y) {
       const padBottom = rawCellH * 0.04;
       const padX = rawCellW * 0.08;
 
-      const cellX = blockX + (rawCellW * 1);
+      // 캐릭터별 전용 열 오프셋이 정의되어 있으면 해당 열 사용, 기본은 1번 열
+      const chosenCol = (char.colOffset !== undefined) ? char.colOffset : 1;
+      const cellX = blockX + (rawCellW * chosenCol);
       const cellY = blockY;
 
       sx = cellX + padX;
@@ -902,7 +893,6 @@ bindClimbBtn.addEventListener("click", () => {
   bindClimbBtn.innerText = "키 입력...";
 });
 
-// 부스터 실행 시 감지 플래그 설정
 function triggerGoldenRush() {
   if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
   settingsModal.style.display = "none";
@@ -912,7 +902,7 @@ function triggerGoldenRush() {
   }
   gameState = "PLAY";
   isAutoClimbing = true;
-  boosterUsed = true; // 치트/부스터 사용 감지
+  boosterUsed = true;
 
   let stepsLeft = 30;
 
@@ -1017,7 +1007,7 @@ function initGame() {
   energy = 1.0;
   reviveHearts = 0;
   lastHeartThreshold = 0;
-  boosterUsed = false; // 플래그 초기화
+  boosterUsed = false;
   stairs = [{ x: 0, y: 0 }];
 
   let curX = 0;
@@ -1288,7 +1278,6 @@ function drawHUD() {
     ctx.font = "bold 18px monospace";
     ctx.fillText(`SCORE: ${score} (BEST: ${highScore})`, canvas.width / 2, canvas.height / 2 + 5);
 
-    // 부스터 감지 경고 문구 출력
     if (boosterUsed) {
       ctx.save();
       ctx.fillStyle = "#ff0055";
