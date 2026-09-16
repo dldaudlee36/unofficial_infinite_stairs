@@ -474,26 +474,6 @@
       background: #26091c;
     }
 
-    #golden-rush-btn {
-      width: 100%;
-      background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%);
-      border: 2px solid #fffb00;
-      color: #05030e;
-      font-size: 13px;
-      font-weight: 900;
-      letter-spacing: 1px;
-      padding: 9px;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-top: 8px;
-      box-shadow: 0 0 16px rgba(255, 215, 0, 0.4);
-      transition: all 0.15s ease;
-    }
-    #golden-rush-btn:active {
-      transform: scale(0.96);
-      box-shadow: 0 0 24px rgba(255, 215, 0, 0.8);
-    }
-
     .modal-close-btn {
       width: 100%;
       background: #00f2fe;
@@ -540,6 +520,7 @@
 
     <div id="character-roster"></div>
 
+    <!-- 닉네임 입력 모달 -->
     <div class="modal-overlay" id="nickname-modal">
       <div class="modal-box">
         <div class="modal-title">🚀 파일럿 등록</div>
@@ -555,6 +536,7 @@
       </div>
     </div>
 
+    <!-- 게임 가이드북 모달 -->
     <div class="modal-overlay" id="help-modal">
       <div class="modal-box">
         <div class="modal-title">🌌 게임 가이드북</div>
@@ -577,15 +559,7 @@
           </div>
 
           <div class="guide-section">
-            <h4>⚡ 3. 부스터 & 치트 페널티</h4>
-            <ul>
-              <li>설정의 <strong>[Golden Rush]</strong> 사용 시 30층을 실수 없이 고속으로 질주합니다.</li>
-              <li>⚠️ <strong>주의</strong>: 부스터를 1회라도 쓰면 결과 화면에 치트 사용이 적발되어 랭킹 등록이 박탈됩니다.</li>
-            </ul>
-          </div>
-
-          <div class="guide-section">
-            <h4>🏆 4. 실시간 통합 랭킹보드</h4>
+            <h4>🏆 3. 실시간 통합 랭킹보드</h4>
             <ul>
               <li>모든 파일럿의 <strong>개인 최고 기록</strong>만 엄선되어 등록됩니다.</li>
               <li>[일반]과 [꺼드럭] 뱃지로 달성 모드가 명확히 구분됩니다.</li>
@@ -596,9 +570,10 @@
       </div>
     </div>
 
+    <!-- 설정 모달 (부스터 버튼 영구 삭제 완료) -->
     <div class="modal-overlay" id="settings-modal">
       <div class="modal-box">
-        <div class="modal-title">설정 & 치트</div>
+        <div class="modal-title">게임 설정</div>
         <div class="modal-body">
           <div class="key-row">
             <span>방향 전환 키:</span>
@@ -613,7 +588,6 @@
           </div>
           
           <button id="mode-toggle-btn">🎮 모드: 일반인 모드 (하트 ON)</button>
-          <button id="golden-rush-btn">⚡ Golden Rush (+30F)</button>
         </div>
         <button class="modal-close-btn" id="close-modal-btn">설정 완료</button>
       </div>
@@ -666,19 +640,15 @@
   const db = getDatabase(app);
   const rankingsRef = ref(db, "rankings");
 
-  // 실시간 랭킹 수신 및 개인 최고 기록 필터링 (완전 방어형)
   onValue(rankingsRef, (snapshot) => {
     const rawList = [];
-    
     if (!snapshot.exists()) {
-      console.log("ℹ️ DB에 등록된 데이터가 아예 없습니다.");
       document.getElementById("history-body").innerHTML = `<tr><td colspan="4" class="empty-state">아직 등록된 랭킹 기록이 없습니다.<br>첫 계단을 올라 1위를 차지하세요!</td></tr>`;
       return;
     }
 
     snapshot.forEach((child) => {
       const val = child.val();
-      // 유효한 점수와 데이터가 있는 노드만 안전하게 추출
       if (val && typeof val === "object" && val.score !== undefined) {
         rawList.push({
           nickname: String(val.nickname || "무명 파일럿"),
@@ -691,14 +661,10 @@
       }
     });
 
-    console.log(`📊 DB에서 불러온 총 원시 데이터 수: ${rawList.length}개`, rawList);
-
-    // 1. 개인 최고 기록(Personal Best) 필터링
     const userBestMap = new Map();
     rawList.forEach((entry) => {
       const name = entry.nickname.trim();
       if (!name) return;
-
       if (!userBestMap.has(name)) {
         userBestMap.set(name, entry);
       } else {
@@ -711,10 +677,7 @@
       }
     });
 
-    // 2. 점수 내림차순 정렬
     const uniqueRankList = Array.from(userBestMap.values()).sort((a, b) => b.score - a.score);
-    console.log(`🏆 1인 1기록 정제 후 랭커 수: ${uniqueRankList.length}명`, uniqueRankList);
-
     const top30 = uniqueRankList.slice(0, 30);
     const tbody = document.getElementById("history-body");
     tbody.innerHTML = "";
@@ -745,8 +708,6 @@
       `;
       tbody.appendChild(tr);
     });
-  }, (error) => {
-    console.error("❌ Firebase 실시간 수신 에러:", error);
   });
 
   function sendScoreInternal(finalScore, mode, charIcon, nickname) {
@@ -757,14 +718,12 @@
 
     push(rankingsRef, {
       nickname: nickname || "무명 파일럿",
-      score: finalScore,
-      mode: mode,
-      charIcon: charIcon,
+      score: Number(finalScore),
+      mode: String(mode),
+      charIcon: String(charIcon),
       time: timeStr,
       timestamp: Date.now()
-    }).catch(err => {
-      console.error("Firebase write error:", err);
-    });
+    }).catch(err => console.error("Firebase write error:", err));
   }
 
   const canvas = document.getElementById("gameCanvas");
@@ -843,14 +802,16 @@
   let energy = 1.0;
   const MAX_ENERGY = 1.0;
 
+  // 초고속 매크로(오토클릭) 방어용 속도 감시 변수
+  let lastStepTime = 0;
+  let rapidClickCount = 0;
+
   let camX = 0;
   let camY = 0;
   let targetCamX = 0;
   let targetCamY = 0;
 
-  let isAutoClimbing = false;
   let isNormalMode = true;
-  let boosterUsed = false;
   let currentProvocation = "";
 
   let reviveHearts = 0;
@@ -929,10 +890,9 @@
   let currentSelectedChar = "businessman";
 
   function recordGameResult(finalScore) {
-    if (boosterUsed || finalScore <= 0) return;
+    if (finalScore <= 0) return;
     const charObj = characters.find(c => c.id === currentSelectedChar) || characters[0];
     const mode = isNormalMode ? "normal" : "hardcore";
-    
     sendScoreInternal(finalScore, mode, getCharIcon(charObj.id), playerNickname);
   }
 
@@ -1046,7 +1006,6 @@
 
   const bindTurnBtn = document.getElementById("bind-turn-btn");
   const bindClimbBtn = document.getElementById("bind-climb-btn");
-  const goldenRushBtn = document.getElementById("golden-rush-btn");
   const modeToggleBtn = document.getElementById("mode-toggle-btn");
   const modeBadge = document.getElementById("mode-badge");
 
@@ -1101,56 +1060,10 @@
     bindClimbBtn.innerText = "키 입력...";
   });
 
-  function triggerGoldenRush() {
-    if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
-    settingsModal.style.display = "none";
-    
-    if (gameState === "GAMEOVER") {
-      initGame();
-    }
-    gameState = "PLAY";
-    isAutoClimbing = true;
-    boosterUsed = true;
-
-    let stepsLeft = 30;
-
-    const climbInterval = setInterval(() => {
-      if (stepsLeft <= 0 || gameState !== "PLAY") {
-        clearInterval(climbInterval);
-        isAutoClimbing = false;
-        return;
-      }
-
-      const nextY = player.y + 1;
-      const nextStair = stairs[nextY];
-
-      if (!nextStair) {
-        clearInterval(climbInterval);
-        isAutoClimbing = false;
-        return;
-      }
-
-      const requiredDir = nextStair.x - player.x;
-      const needTurn = (requiredDir !== player.dir);
-
-      step(needTurn);
-      energy = MAX_ENERGY;
-
-      stepsLeft--;
-    }, 40);
-  }
-
-  goldenRushBtn.addEventListener("click", triggerGoldenRush);
-
   window.addEventListener("keydown", (e) => {
     const gameActionKeys = [
-      "Space", 
-      "ArrowUp", 
-      "ArrowDown", 
-      "ArrowLeft", 
-      "ArrowRight",
-      keyBindings.turn.code, 
-      keyBindings.climb.code
+      "Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+      keyBindings.turn.code, keyBindings.climb.code
     ];
 
     if (gameActionKeys.includes(e.code)) {
@@ -1167,10 +1080,10 @@
       return;
     }
 
-    if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
+    if (gameState === "REVIVE_COUNTDOWN") return;
     if (e.repeat) return;
 
-    if (e.code === "Space" && gameState === "GAMEOVER") {
+    if (e.code === "Space" && (gameState === "GAMEOVER" || gameState === "CHEATER_BANNED")) {
       initGame();
       gameState = "PLAY";
       return;
@@ -1204,7 +1117,7 @@
       `;
 
       card.addEventListener("click", () => {
-        if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
+        if (gameState === "REVIVE_COUNTDOWN") return;
         currentSelectedChar = ch.id;
         renderCharacterRoster();
       });
@@ -1222,19 +1135,7 @@
     return map[id] || "👤";
   }
 
-  function getProvocationText(currentScore, isBooster) {
-    if (isBooster) {
-      const boosterInsults = [
-        "부스터 쳐쓰고 이 점수면 그냥 접어라.",
-        "치트키 딸깍거려놓고 꺼드럭대려고? 양심 터졌네.",
-        "날로 먹으려다 체했죠? 꼴좋다.",
-        "치트키 쓰고도 처망하는 손가락은 도대체 정체가 뭐냐?",
-        "남들은 맨손으로 가는데 부스터 빨고도 누워버리네 ㅋ.",
-        "딸깍질로 올린 점수 자랑질하려다 뽀록났죠? 개추함."
-      ];
-      return boosterInsults[Math.floor(Math.random() * boosterInsults.length)];
-    }
-
+  function getProvocationText(currentScore) {
     if (currentScore < 30) {
       const list = [
         "손가락에 깁스함? 발가락으로 눌러도 30층은 가겠다.",
@@ -1304,8 +1205,9 @@
     energy = 1.0;
     reviveHearts = 0;
     lastHeartThreshold = 0;
-    boosterUsed = false;
     currentProvocation = "";
+    lastStepTime = 0;
+    rapidClickCount = 0;
     stairs = [{ x: 0, y: 0 }];
 
     let curX = 0;
@@ -1401,9 +1303,31 @@
     return false;
   }
 
+  function triggerCheaterBan(reason) {
+    gameState = "CHEATER_BANNED";
+    playBeep(80, "sawtooth", 0.6);
+    console.warn("불법 매크로 차단 발동:", reason);
+  }
+
   function step(isTurn) {
     if (gameState === "READY") gameState = "PLAY";
     if (gameState !== "PLAY") return;
+
+    // 인간 한계 초과 오토클릭 매크로 방어 가드 (간격 35ms 미만 연타 감지)
+    const now = performance.now();
+    if (lastStepTime > 0) {
+      const diff = now - lastStepTime;
+      if (diff < 35) {
+        rapidClickCount++;
+        if (rapidClickCount > 5) {
+          triggerCheaterBan("비정상적인 초고속 매크로 연타 감지");
+          return;
+        }
+      } else {
+        rapidClickCount = Math.max(0, rapidClickCount - 1);
+      }
+    }
+    lastStepTime = now;
 
     if (isTurn) {
       player.dir = -player.dir;
@@ -1445,7 +1369,7 @@
 
   function gameOver() {
     gameState = "GAMEOVER";
-    currentProvocation = getProvocationText(score, boosterUsed);
+    currentProvocation = getProvocationText(score);
     playBeep(130, "sawtooth", 0.25);
     recordGameResult(score);
   }
@@ -1455,8 +1379,8 @@
   const bindTouch = (btn, isTurn) => {
     const trigger = (e) => {
       e.preventDefault();
-      if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
-      if (gameState === "GAMEOVER") {
+      if (gameState === "REVIVE_COUNTDOWN") return;
+      if (gameState === "GAMEOVER" || gameState === "CHEATER_BANNED") {
         initGame();
         gameState = "PLAY";
         return;
@@ -1470,7 +1394,7 @@
   bindTouch(climbBtn, false);
 
   function update() {
-    if (gameState === "PLAY" && !isAutoClimbing) {
+    if (gameState === "PLAY") {
       const drain = 0.0036 + Math.min(score * 0.00008, 0.009);
       energy -= drain;
       if (energy <= 0) {
@@ -1572,7 +1496,6 @@
       
       ctx.save();
       ctx.textAlign = "center";
-
       ctx.fillStyle = "#ff007f";
       ctx.font = "900 36px sans-serif";
       ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 50);
@@ -1587,20 +1510,36 @@
       ctx.shadowBlur = 8;
       ctx.fillText(`"${currentProvocation}"`, canvas.width / 2, canvas.height / 2 + 25);
 
-      let nextY = canvas.height / 2 + 65;
-      if (boosterUsed) {
-        ctx.fillStyle = "#ff0055";
-        ctx.font = "bold 14px sans-serif";
-        ctx.shadowColor = "#ff0055";
-        ctx.shadowBlur = 12;
-        ctx.fillText("⚠️ 부스터 사용 감지: 랭킹 등록 제외", canvas.width / 2, nextY);
-        nextY += 35;
-      }
-
       ctx.fillStyle = "#a855f7";
       ctx.font = "13px sans-serif";
       ctx.shadowBlur = 0;
-      ctx.fillText("버튼 터치 시 재시작", canvas.width / 2, nextY);
+      ctx.fillText("버튼 터치 시 재시작", canvas.width / 2, canvas.height / 2 + 70);
+      ctx.restore();
+
+    } else if (gameState === "CHEATER_BANNED") {
+      ctx.fillStyle = "rgba(22, 0, 8, 0.96)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#ff0055";
+      ctx.font = "900 30px sans-serif";
+      ctx.shadowColor = "#ff0055";
+      ctx.shadowBlur = 18;
+      ctx.fillText("🚨 MACRO BANNED 🚨", canvas.width / 2, canvas.height / 2 - 40);
+
+      ctx.fillStyle = "#facc15";
+      ctx.font = "bold 15px sans-serif";
+      ctx.shadowBlur = 0;
+      ctx.fillText("오토클릭 매크로 돌리다 딱 걸렸죠? ㅋ", canvas.width / 2, canvas.height / 2 + 5);
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "12px sans-serif";
+      ctx.fillText("인간의 손가락 속도로 정직하게 하세요.", canvas.width / 2, canvas.height / 2 + 40);
+
+      ctx.fillStyle = "#a855f7";
+      ctx.font = "12px sans-serif";
+      ctx.fillText("화면 터치 시 리셋", canvas.width / 2, canvas.height / 2 + 80);
       ctx.restore();
 
     } else if (gameState === "REVIVE_COUNTDOWN") {
