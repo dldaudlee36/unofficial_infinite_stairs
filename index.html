@@ -219,7 +219,6 @@
       font-weight: bold;
     }
 
-    /* 통합 실시간 랭킹 패널 */
     #history-panel {
       width: 340px;
       height: 840px;
@@ -549,8 +548,9 @@
           실시간 공용 랭킹에 등록할 닉네임을 입력하세요.
         </div>
         <input type="text" id="player-nickname-input" class="nickname-input" maxlength="8" placeholder="닉네임 (최대 8자)" autocomplete="off">
+        <div id="nickname-error-msg" style="font-size: 11px; color: #ff0055; text-align: center; margin-bottom: 6px; display: none;"></div>
         <div style="font-size: 10px; color: #94a3b8; text-align: center; margin-bottom: 8px;">
-          * 부스터 사용 시 랭킹 등록이 자동 차단됩니다.
+          * 개인 최고 기록만 랭킹에 박제됩니다.
         </div>
         <button class="modal-close-btn" id="confirm-nickname-btn">출격 준비 완료</button>
       </div>
@@ -589,8 +589,8 @@
           <div class="guide-section">
             <h4>🏆 4. 실시간 통합 랭킹보드</h4>
             <ul>
-              <li>단톡방의 모든 유저 기록이 실시간으로 공유되며, [일반]과 [꺼드럭] 뱃지로 모드가 표시됩니다.</li>
-              <li>탈락 시 층수 실력에 따라 찰진 팩폭 도발 문구가 출력됩니다.</li>
+              <li>모든 파일럿의 <strong>개인 최고 기록</strong>만 엄선되어 등록됩니다.</li>
+              <li>[일반]과 [꺼드럭] 뱃지로 달성 모드가 명확히 구분됩니다.</li>
             </ul>
           </div>
         </div>
@@ -627,10 +627,10 @@
   <div id="history-panel">
     <div class="panel-header">
       <div class="panel-title">
-        <span>🏆 LIVE RANKING</span>
+        <span>🏆 LIVE TOP RANK</span>
         <span class="user-tag" id="current-user-display" title="닉네임 변경">[게스트]</span>
       </div>
-      <span style="font-size: 10px; color: #00f2fe;">● 실시간 동기화</span>
+      <span style="font-size: 10px; color: #00f2fe;">● 1인 1기록</span>
     </div>
 
     <div class="history-table-wrap">
@@ -656,7 +656,7 @@
      ========================================== -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-  import { getDatabase, ref, push, onValue, query, orderByChild, limitToLast } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
+  import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAuF-mVvKAPcx6s9MCVGyLuiAG0LgIshbY",
@@ -689,27 +689,46 @@
     });
   };
 
-  // 실시간 랭킹 수신 및 UI 렌더링 (TOP 30)
-  const topScoresQuery = query(rankingsRef, orderByChild("score"), limitToLast(30));
-  onValue(topScoresQuery, (snapshot) => {
-    const list = [];
+  // 실시간 랭킹 수신 및 '개인 최고 기록(Personal Best)' 단일화 필터 적용
+  onValue(rankingsRef, (snapshot) => {
+    const rawList = [];
     snapshot.forEach((child) => {
-      list.push(child.val());
+      rawList.push(child.val());
     });
-    // 내림차순 정렬
-    list.sort((a, b) => b.score - a.score);
 
+    // 1. 개인 최고 기록(Personal Best) 맵 구성 (닉네임 기준 단 1개만 유지)
+    const userBestMap = new Map();
+    rawList.forEach((entry) => {
+      const name = entry.nickname;
+      if (!userBestMap.has(name)) {
+        userBestMap.set(name, entry);
+      } else {
+        const existing = userBestMap.get(name);
+        if (entry.score > existing.score) {
+          userBestMap.set(name, entry);
+        } else if (entry.score === existing.score && entry.timestamp > existing.timestamp) {
+          userBestMap.set(name, entry);
+        }
+      }
+    });
+
+    // 2. 점수 내림차순 정렬
+    const uniqueRankList = Array.from(userBestMap.values());
+    uniqueRankList.sort((a, b) => b.score - a.score);
+
+    // 3. TOP 30 렌더링
+    const top30 = uniqueRankList.slice(0, 30);
     const tbody = document.getElementById("history-body");
     tbody.innerHTML = "";
 
-    if (list.length === 0) {
+    if (top30.length === 0) {
       tbody.innerHTML = `<tr><td colspan="4" class="empty-state">아직 등록된 랭킹 기록이 없습니다.<br>첫 계단을 올라 1위를 차지하세요!</td></tr>`;
       return;
     }
 
-    const maxVal = list[0].score;
+    const maxVal = top30[0].score;
 
-    list.forEach((h, idx) => {
+    top30.forEach((h, idx) => {
       const tr = document.createElement("tr");
       const isTop = idx === 0 && maxVal > 0;
       const modeBadge = h.mode === "normal" 
@@ -833,17 +852,33 @@ let lastSafeStair = { x: 0, y: 0 };
 let countdownNumber = 3;
 let countdownTimer = null;
 
+// ==========================================
+// 닉네임 관리 & 차단(박종천, 종천이) 가드
+// ==========================================
 let playerNickname = localStorage.getItem("cosmic_user_nickname") || "";
 const nicknameModal = document.getElementById("nickname-modal");
 const nicknameInput = document.getElementById("player-nickname-input");
 const confirmNicknameBtn = document.getElementById("confirm-nickname-btn");
 const currentUserDisplay = document.getElementById("current-user-display");
+const nicknameErrorMsg = document.getElementById("nickname-error-msg");
+
+// 박종천, 종천이 차단 검사 함수
+function isBannedUser(name) {
+  if (!name) return false;
+  const clean = name.replace(/\s+/g, "");
+  return clean.includes("박종천") || clean.includes("종천이");
+}
 
 function updateNicknameDisplay() {
-  if (playerNickname) {
+  if (isBannedUser(playerNickname)) {
+    currentUserDisplay.innerText = `[⛔접근차단: ${playerNickname}]`;
+    currentUserDisplay.style.color = "#ff0055";
+  } else if (playerNickname) {
     currentUserDisplay.innerText = `[${playerNickname}]`;
+    currentUserDisplay.style.color = "#facc15";
   } else {
     currentUserDisplay.innerText = `[등록 필요]`;
+    currentUserDisplay.style.color = "#94a3b8";
   }
 }
 
@@ -860,9 +895,22 @@ function checkNicknameOnStart() {
 confirmNicknameBtn.addEventListener("click", () => {
   const val = nicknameInput.value.trim();
   if (val.length === 0) {
-    alert("닉네임을 1자 이상 입력해 주세요!");
+    nicknameErrorMsg.innerText = "닉네임을 1자 이상 입력해 주세요!";
+    nicknameErrorMsg.style.display = "block";
     return;
   }
+  
+  if (isBannedUser(val)) {
+    playerNickname = val;
+    localStorage.setItem("cosmic_user_nickname", playerNickname);
+    nicknameErrorMsg.innerText = "🚨 탑승 불가: 박종천/종천이는 플레이가 영구 금지되었습니다.";
+    nicknameErrorMsg.style.display = "block";
+    updateNicknameDisplay();
+    // 모달을 닫지 않고 차단 상태 유지
+    return;
+  }
+
+  nicknameErrorMsg.style.display = "none";
   playerNickname = val;
   localStorage.setItem("cosmic_user_nickname", playerNickname);
   nicknameModal.style.display = "none";
@@ -897,7 +945,7 @@ const characters = [
 let currentSelectedChar = "businessman";
 
 function recordGameResult(finalScore) {
-  if (boosterUsed) return;
+  if (boosterUsed || isBannedUser(playerNickname)) return;
   const charObj = characters.find(c => c.id === currentSelectedChar) || characters[0];
   const mode = isNormalMode ? "normal" : "hardcore";
   
@@ -1042,6 +1090,7 @@ function updateModeUI() {
 }
 
 modeToggleBtn.addEventListener("click", () => {
+  if (isBannedUser(playerNickname)) return;
   isNormalMode = !isNormalMode;
   updateModeUI();
   initGame();
@@ -1072,6 +1121,7 @@ bindClimbBtn.addEventListener("click", () => {
 });
 
 function triggerGoldenRush() {
+  if (isBannedUser(playerNickname)) return;
   if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
   settingsModal.style.display = "none";
   
@@ -1127,6 +1177,9 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
   }
 
+  // 박종천 차단 유저 조작 무력화
+  if (isBannedUser(playerNickname)) return;
+
   if (listeningTarget) {
     const cleanLabel = e.key === " " ? "SPACE" : (e.key.length === 1 ? e.key.toUpperCase() : e.code.replace("Key", "").replace("Arrow", ""));
     keyBindings[listeningTarget] = { code: e.code, label: cleanLabel };
@@ -1174,6 +1227,7 @@ function renderCharacterRoster() {
     `;
 
     card.addEventListener("click", () => {
+      if (isBannedUser(playerNickname)) return;
       if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
       currentSelectedChar = ch.id;
       renderCharacterRoster();
@@ -1372,6 +1426,7 @@ function tryRevive() {
 }
 
 function step(isTurn) {
+  if (isBannedUser(playerNickname)) return;
   if (gameState === "READY") gameState = "PLAY";
   if (gameState !== "PLAY") return;
 
@@ -1425,6 +1480,7 @@ const climbBtn = document.getElementById("btn-climb");
 const bindTouch = (btn, isTurn) => {
   const trigger = (e) => {
     e.preventDefault();
+    if (isBannedUser(playerNickname)) return;
     if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
     if (gameState === "GAMEOVER") {
       initGame();
@@ -1440,6 +1496,8 @@ bindTouch(turnBtn, true);
 bindTouch(climbBtn, false);
 
 function update() {
+  if (isBannedUser(playerNickname)) return;
+
   if (gameState === "PLAY" && !isAutoClimbing) {
     const drain = 0.0036 + Math.min(score * 0.00008, 0.009);
     energy -= drain;
@@ -1526,6 +1584,31 @@ function drawHUD() {
   ctx.fillText(score, canvas.width / 2, 85);
   ctx.restore();
 
+  // 차단 유저 영구 오버레이
+  if (isBannedUser(playerNickname)) {
+    ctx.fillStyle = "rgba(18, 2, 10, 0.94)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ff0055";
+    ctx.font = "900 28px sans-serif";
+    ctx.shadowColor = "#ff0055";
+    ctx.shadowBlur = 15;
+    ctx.fillText("🚫 ACCESS DENIED", canvas.width / 2, canvas.height / 2 - 30);
+
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowBlur = 0;
+    ctx.fillText(`[${playerNickname}] 플레이 금지 대상`, canvas.width / 2, canvas.height / 2 + 10);
+
+    ctx.font = "12px sans-serif";
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText("상단 [닉네임]을 눌러 다른 닉네임으로 변경하세요.", canvas.width / 2, canvas.height / 2 + 40);
+    ctx.restore();
+    return;
+  }
+
   if (gameState === "READY") {
     ctx.fillStyle = "rgba(5, 3, 15, 0.75)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1560,7 +1643,7 @@ function drawHUD() {
     let nextY = canvas.height / 2 + 65;
     if (boosterUsed) {
       ctx.fillStyle = "#ff0055";
-      ctx.font = "bold 14px sans-serif";
+      ctx.font = "bold 13px sans-serif";
       ctx.shadowColor = "#ff0055";
       ctx.shadowBlur = 12;
       ctx.fillText("⚠️ 부스터 사용 감지: 랭킹 등록 제외", canvas.width / 2, nextY);
