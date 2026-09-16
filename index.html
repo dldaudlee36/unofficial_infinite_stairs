@@ -716,7 +716,7 @@
   });
 
   function sendScoreInternal(finalScore, mode, charIcon, nickname) {
-    if (finalScore <= 0 || finalScore > 250) return;
+    if (finalScore <= 0 || finalScore > 800) return;
 
     const now = new Date();
     const timeStr = `${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
