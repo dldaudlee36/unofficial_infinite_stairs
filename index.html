@@ -666,13 +666,39 @@
   const db = getDatabase(app);
   const rankingsRef = ref(db, "rankings");
 
+  // 실시간 랭킹 수신 및 개인 최고 기록 필터링 (완전 방어형)
   onValue(rankingsRef, (snapshot) => {
     const rawList = [];
-    snapshot.forEach((child) => rawList.push(child.val()));
+    
+    if (!snapshot.exists()) {
+      console.log("ℹ️ DB에 등록된 데이터가 아예 없습니다.");
+      document.getElementById("history-body").innerHTML = `<tr><td colspan="4" class="empty-state">아직 등록된 랭킹 기록이 없습니다.<br>첫 계단을 올라 1위를 차지하세요!</td></tr>`;
+      return;
+    }
 
+    snapshot.forEach((child) => {
+      const val = child.val();
+      // 유효한 점수와 데이터가 있는 노드만 안전하게 추출
+      if (val && typeof val === "object" && val.score !== undefined) {
+        rawList.push({
+          nickname: String(val.nickname || "무명 파일럿"),
+          score: Number(val.score) || 0,
+          mode: val.mode === "hardcore" ? "hardcore" : "normal",
+          charIcon: val.charIcon || "👤",
+          time: val.time || "-",
+          timestamp: Number(val.timestamp) || 0
+        });
+      }
+    });
+
+    console.log(`📊 DB에서 불러온 총 원시 데이터 수: ${rawList.length}개`, rawList);
+
+    // 1. 개인 최고 기록(Personal Best) 필터링
     const userBestMap = new Map();
     rawList.forEach((entry) => {
-      const name = entry.nickname;
+      const name = entry.nickname.trim();
+      if (!name) return;
+
       if (!userBestMap.has(name)) {
         userBestMap.set(name, entry);
       } else {
@@ -685,13 +711,16 @@
       }
     });
 
+    // 2. 점수 내림차순 정렬
     const uniqueRankList = Array.from(userBestMap.values()).sort((a, b) => b.score - a.score);
+    console.log(`🏆 1인 1기록 정제 후 랭커 수: ${uniqueRankList.length}명`, uniqueRankList);
+
     const top30 = uniqueRankList.slice(0, 30);
     const tbody = document.getElementById("history-body");
     tbody.innerHTML = "";
 
     if (top30.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="4" class="empty-state">아직 등록된 랭킹 기록이 없습니다.<br>첫 계단을 올라 1위를 차지하세요!</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" class="empty-state">아직 유효한 랭킹 기록이 없습니다.<br>첫 계단을 올라 1위를 차지하세요!</td></tr>`;
       return;
     }
 
@@ -716,6 +745,8 @@
       `;
       tbody.appendChild(tr);
     });
+  }, (error) => {
+    console.error("❌ Firebase 실시간 수신 에러:", error);
   });
 
   function sendScoreInternal(finalScore, mode, charIcon, nickname) {
