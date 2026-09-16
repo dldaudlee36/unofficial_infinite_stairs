@@ -933,11 +933,28 @@ function triggerGoldenRush() {
 
 goldenRushBtn.addEventListener("click", triggerGoldenRush);
 
+// ==========================================
+// 스크롤 간섭 차단 및 게임 조작 키 이벤트 핸들러
+// ==========================================
 window.addEventListener("keydown", (e) => {
-  if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
+  // 브라우저 기본 스크롤을 유발하는 게임 관련 키 목록
+  const gameActionKeys = [
+    "Space", 
+    "ArrowUp", 
+    "ArrowDown", 
+    "ArrowLeft", 
+    "ArrowRight",
+    keyBindings.turn.code, 
+    keyBindings.climb.code
+  ];
 
-  if (listeningTarget) {
+  // 게임 조작 관련 키 입력 시 브라우저 페이지 스크롤 무조건 차단
+  if (gameActionKeys.includes(e.code)) {
     e.preventDefault();
+  }
+
+  // 1. 키 바인딩 설정 중인 경우
+  if (listeningTarget) {
     const cleanLabel = e.key === " " ? "SPACE" : (e.key.length === 1 ? e.key.toUpperCase() : e.code.replace("Key", "").replace("Arrow", ""));
     keyBindings[listeningTarget] = { code: e.code, label: cleanLabel };
     listeningTarget = null;
@@ -947,16 +964,23 @@ window.addEventListener("keydown", (e) => {
     return;
   }
 
+  // 2. 부스터 자동 등반 또는 부활 카운트다운 중 조작 방지
+  if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
+
+  // 키 길게 누름(연타 방지) 차단
   if (e.repeat) return;
+
+  // 3. 게임 오버 시 스페이스바로 즉시 재시작
   if (e.code === "Space" && gameState === "GAMEOVER") {
     initGame();
     gameState = "PLAY";
     return;
   }
 
-  if (e.code === keyBindings.turn.code || e.key === "ArrowLeft") {
+  // 4. 이동 및 방향 전환 판정
+  if (e.code === keyBindings.turn.code || e.code === "ArrowLeft") {
     step(true);
-  } else if (e.code === keyBindings.climb.code || e.key === "ArrowUp") {
+  } else if (e.code === keyBindings.climb.code || e.code === "ArrowUp") {
     step(false);
   }
 });
