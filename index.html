@@ -520,7 +520,6 @@
 
     <div id="character-roster"></div>
 
-    <!-- 닉네임 입력 모달 -->
     <div class="modal-overlay" id="nickname-modal">
       <div class="modal-box">
         <div class="modal-title">🚀 파일럿 등록</div>
@@ -536,7 +535,6 @@
       </div>
     </div>
 
-    <!-- 게임 가이드북 모달 -->
     <div class="modal-overlay" id="help-modal">
       <div class="modal-box">
         <div class="modal-title">🌌 게임 가이드북</div>
@@ -570,7 +568,6 @@
       </div>
     </div>
 
-    <!-- 설정 모달 (부스터 버튼 영구 삭제 완료) -->
     <div class="modal-overlay" id="settings-modal">
       <div class="modal-box">
         <div class="modal-title">게임 설정</div>
@@ -639,6 +636,9 @@
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
   const rankingsRef = ref(db, "rankings");
+
+  // 비밀 서명 키 정의 (Firebase Rules와 1:1 동기화)
+  const CLIENT_SECRET_KEY = "k39f_cosmic_x82";
 
   onValue(rankingsRef, (snapshot) => {
     const rawList = [];
@@ -711,7 +711,8 @@
   });
 
   function sendScoreInternal(finalScore, mode, charIcon, nickname) {
-    if (finalScore <= 0 || finalScore > 1500) return;
+    // 250 초과 수치 프론트 1차 차단
+    if (finalScore <= 0 || finalScore > 250) return;
 
     const now = new Date();
     const timeStr = `${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -722,7 +723,8 @@
       mode: String(mode),
       charIcon: String(charIcon),
       time: timeStr,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      secretKey: CLIENT_SECRET_KEY
     }).catch(err => console.error("Firebase write error:", err));
   }
 
@@ -802,14 +804,13 @@
   let energy = 1.0;
   const MAX_ENERGY = 1.0;
 
-  // 초고속 매크로(오토클릭) 방어용 속도 감시 변수
   let lastStepTime = 0;
   let rapidClickCount = 0;
 
   let camX = 0;
   let camY = 0;
   let targetCamX = 0;
-  let targetCamY = 0;
+  targetCamY = 0;
 
   let isNormalMode = true;
   let currentProvocation = "";
@@ -1166,7 +1167,7 @@
         "슬슬 속도 붙으니까 손가락 꼬여서 뇌정지 왔냐?"
       ];
       return list[Math.floor(Math.random() * list.length)];
-    } else if (currentScore < 350) {
+    } else {
       const list = [
         "부활 하트 쳐먹고도 꼬라박는 거 보면 능지가 처참하다.",
         "하트 하나 믿고 깝죽대더니 장렬하게 바닥 청소 엔딩.",
@@ -1174,26 +1175,6 @@
         "제법인데? 그래봤자 랭커 발끝도 못 미침.",
         "제법 폼 잡더니 귀신같이 손가락 꼬여서 수직 낙하하네.",
         "벽 느껴지지? 응 너 같은 범재는 평생 가도 500층 못 봐."
-      ];
-      return list[Math.floor(Math.random() * list.length)];
-    } else if (currentScore < 500) {
-      const list = [
-        "눈알 빠질 것 같지? 안 봐준다, 1층부터 다시 기어 와.",
-        "아깝지? 억울해 뒤지겠지? 샷건 치지 말고 다시 해.",
-        "집중력 밑천 드러났네. 한 판 더 해도 똑같음.",
-        "멘탈 바사삭 소리 여기까지 들린다. 샷건 치지 마라 모니터 깨진다.",
-        "집중력 밑천 털려서 동공 지진 난 거 다 보였음 ㅋ.",
-        "아깝지? 피눈물 나지? 억울하면 밤새워서 다시 기어 와봐."
-      ];
-      return list[Math.floor(Math.random() * list.length)];
-    } else {
-      const list = [
-        "인생을 여기에 갈아 넣었네. 현생은 살고 있냐?",
-        "잘하긴 하는데 묘하게 꼴 보기 싫은 점수네.",
-        "손가락 쥐 난 거 뻔히 보이는데 추하게 가네.",
-        "이 점수 찍을 시간에 자격증을 땄으면 취직을 했겠다.",
-        "손목 터널 증후군 예약 축하한다. 병원비나 모아둬라.",
-        "잘하긴 하는데 진짜 징글징글하다. 방구석 탈출은 언제 함?"
       ];
       return list[Math.floor(Math.random() * list.length)];
     }
@@ -1313,7 +1294,6 @@
     if (gameState === "READY") gameState = "PLAY";
     if (gameState !== "PLAY") return;
 
-    // 인간 한계 초과 오토클릭 매크로 방어 가드 (간격 35ms 미만 연타 감지)
     const now = performance.now();
     if (lastStepTime > 0) {
       const diff = now - lastStepTime;
