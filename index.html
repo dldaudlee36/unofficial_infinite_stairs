@@ -91,12 +91,17 @@
       border: 1px solid #ff007f;
     }
 
-    #settings-btn {
+    .top-btns {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .icon-btn {
       background: #161038;
       border: 1px solid #7928ca;
       border-radius: 8px;
       color: #00f2fe;
-      font-size: 16px;
+      font-size: 15px;
       width: 32px;
       height: 32px;
       display: flex;
@@ -105,7 +110,7 @@
       cursor: pointer;
       box-shadow: 0 2px 8px rgba(0, 242, 254, 0.2);
     }
-    #settings-btn:active { transform: scale(0.92); }
+    .icon-btn:active { transform: scale(0.92); }
 
     #canvas-wrap {
       flex: 1;
@@ -214,8 +219,9 @@
       font-weight: bold;
     }
 
+    /* 통합 실시간 랭킹 패널 */
     #history-panel {
-      width: 320px;
+      width: 340px;
       height: 840px;
       max-height: 90vh;
       background: rgba(13, 9, 38, 0.75);
@@ -235,56 +241,23 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px;
+      padding: 0 14px;
     }
     .panel-title {
       font-size: 13px;
       font-weight: 800;
       color: #00f2fe;
       letter-spacing: 0.5px;
-    }
-    .panel-clear-btn {
-      background: transparent;
-      border: 1px solid #ff007f;
-      color: #ff007f;
-      font-size: 10px;
-      font-weight: bold;
-      padding: 3px 8px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    .panel-clear-btn:active {
-      background: #ff007f;
-      color: #fff;
-    }
-
-    .history-tab-bar {
       display: flex;
-      background: #0d0926;
-      border-bottom: 1px solid #2d1b54;
+      align-items: center;
+      gap: 6px;
     }
-    .history-tab-btn {
-      flex: 1;
-      padding: 8px 0;
-      background: transparent;
-      border: none;
-      color: #64748b;
-      font-size: 12px;
-      font-weight: 800;
+    .user-tag {
+      font-size: 11px;
+      color: #facc15;
+      font-weight: normal;
       cursor: pointer;
-      transition: all 0.2s ease;
-      border-bottom: 2px solid transparent;
-    }
-    .history-tab-btn.active.normal {
-      color: #00f2fe;
-      border-bottom-color: #00f2fe;
-      background: rgba(0, 242, 254, 0.05);
-    }
-    .history-tab-btn.active.hardcore {
-      color: #ff007f;
-      border-bottom-color: #ff007f;
-      background: rgba(255, 0, 127, 0.05);
+      text-decoration: underline;
     }
 
     .history-table-wrap {
@@ -309,28 +282,49 @@
       top: 0;
       background: #110d2b;
       color: #a855f7;
-      padding: 10px 12px;
+      padding: 10px 8px;
       font-size: 11px;
       font-weight: bold;
       border-bottom: 1px solid #2d1b54;
       z-index: 1;
     }
     table.history-table td {
-      padding: 8px 12px;
+      padding: 8px;
       border-bottom: 1px solid rgba(45, 27, 84, 0.4);
       color: #e2e8f0;
       font-family: monospace;
     }
     table.history-table tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
     table.history-table tr:hover { background: rgba(0, 242, 254, 0.08); }
+    
     .score-badge {
       font-weight: 800;
       color: #00f2fe;
     }
     .score-badge.top {
-      color: #ff007f;
-      text-shadow: 0 0 8px rgba(255, 0, 127, 0.6);
+      color: #ffd700;
+      text-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
     }
+    
+    .row-mode {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: bold;
+      padding: 1px 4px;
+      border-radius: 4px;
+      margin-left: 2px;
+    }
+    .row-mode.normal {
+      color: #00f2fe;
+      background: rgba(0, 242, 254, 0.15);
+      border: 1px solid rgba(0, 242, 254, 0.4);
+    }
+    .row-mode.hardcore {
+      color: #ff007f;
+      background: rgba(255, 0, 127, 0.15);
+      border: 1px solid rgba(255, 0, 127, 0.4);
+    }
+
     .empty-state {
       padding: 40px 16px;
       text-align: center;
@@ -348,7 +342,7 @@
       }
     }
 
-    #settings-modal {
+    .modal-overlay {
       position: absolute;
       top: 0;
       left: 0;
@@ -370,14 +364,71 @@
       border-radius: 14px;
       padding: 20px;
       box-shadow: 0 0 30px rgba(121, 40, 202, 0.4);
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
     }
     .modal-title {
       font-size: 16px;
       font-weight: bold;
       color: #00f2fe;
       text-align: center;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
+      flex-shrink: 0;
     }
+    .modal-body {
+      overflow-y: auto;
+      flex: 1;
+      padding-right: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: #7928ca transparent;
+    }
+
+    .nickname-input {
+      width: 100%;
+      background: #09061c;
+      border: 2px solid #00f2fe;
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: bold;
+      text-align: center;
+      outline: none;
+      margin-bottom: 8px;
+      box-shadow: 0 0 12px rgba(0, 242, 254, 0.2);
+    }
+    .nickname-input:focus {
+      border-color: #facc15;
+      box-shadow: 0 0 16px rgba(250, 204, 21, 0.4);
+    }
+
+    .guide-section {
+      margin-bottom: 14px;
+      background: rgba(22, 16, 56, 0.6);
+      border: 1px solid #2d1b54;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .guide-section h4 {
+      font-size: 13px;
+      color: #facc15;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .guide-section p, .guide-section ul {
+      font-size: 11px;
+      line-height: 1.6;
+      color: #cbd5e1;
+    }
+    .guide-section ul {
+      padding-left: 16px;
+      margin: 0;
+    }
+    .guide-section li { margin-bottom: 4px; }
+
     .key-row {
       display: flex;
       justify-content: space-between;
@@ -454,6 +505,7 @@
       border-radius: 8px;
       cursor: pointer;
       margin-top: 10px;
+      flex-shrink: 0;
     }
   </style>
 </head>
@@ -463,10 +515,13 @@
   <div id="mobile-frame">
     <div id="top-bar">
       <div class="title-wrap">
-        <div class="app-title">Cosmic Infinite Stairs</div>
+        <div class="app-title">Cosmic Stairs</div>
         <span class="mode-badge normal" id="mode-badge">일반인 모드</span>
       </div>
-      <button id="settings-btn">⚙️</button>
+      <div class="top-btns">
+        <button class="icon-btn" id="help-btn" title="게임 설명서">📖</button>
+        <button class="icon-btn" id="settings-btn" title="설정">⚙️</button>
+      </div>
     </div>
 
     <div id="canvas-wrap">
@@ -486,55 +541,200 @@
 
     <div id="character-roster"></div>
 
-    <div id="settings-modal">
+    <!-- 1. 닉네임 입력 온보딩 모달 -->
+    <div class="modal-overlay" id="nickname-modal">
+      <div class="modal-box">
+        <div class="modal-title">🚀 파일럿 등록</div>
+        <div style="font-size: 12px; color: #cbd5e1; text-align: center; margin-bottom: 12px;">
+          실시간 공용 랭킹에 등록할 닉네임을 입력하세요.
+        </div>
+        <input type="text" id="player-nickname-input" class="nickname-input" maxlength="8" placeholder="닉네임 (최대 8자)" autocomplete="off">
+        <div style="font-size: 10px; color: #94a3b8; text-align: center; margin-bottom: 8px;">
+          * 부스터 사용 시 랭킹 등록이 자동 차단됩니다.
+        </div>
+        <button class="modal-close-btn" id="confirm-nickname-btn">출격 준비 완료</button>
+      </div>
+    </div>
+
+    <!-- 2. 게임 설명서 모달 -->
+    <div class="modal-overlay" id="help-modal">
+      <div class="modal-box">
+        <div class="modal-title">🌌 게임 가이드북</div>
+        <div class="modal-body">
+          <div class="guide-section">
+            <h4>🎮 1. 기본 조작법</h4>
+            <ul>
+              <li><strong>[오르기]</strong>: 바라보는 방향 계단으로 1칸 전진 (기본 키: <code>X</code> 또는 <code>↑</code>)</li>
+              <li><strong>[방향 전환]</strong>: 몸을 180도 돌려 반대 방향 계단으로 전진 (기본 키: <code>Z</code> 또는 <code>←</code>)</li>
+              <li>⚙️ 설정 메뉴에서 편한 키로 언제든 변경할 수 있습니다.</li>
+            </ul>
+          </div>
+
+          <div class="guide-section">
+            <h4>⚔️ 2. 게임 모드</h4>
+            <ul>
+              <li><strong>일반인 모드</strong>: 200층 돌파 시마다 부활 하트(❤️) 1개 지급! 떨어져도 3초 카운트다운 후 안전하게 복구됩니다.</li>
+              <li><strong>꺼드럭 모드</strong>: 하트 0개. 단 한 번의 헛디딤이나 시간 초과 즉시 단칼에 사망하는 하드코어 모드입니다.</li>
+            </ul>
+          </div>
+
+          <div class="guide-section">
+            <h4>⚡ 3. 부스터 & 치트 페널티</h4>
+            <ul>
+              <li>설정의 <strong>[Golden Rush]</strong> 사용 시 30층을 실수 없이 고속으로 질주합니다.</li>
+              <li>⚠️ <strong>주의</strong>: 부스터를 1회라도 쓰면 결과 화면에 치트 사용이 적발되어 랭킹 등록이 박탈됩니다.</li>
+            </ul>
+          </div>
+
+          <div class="guide-section">
+            <h4>🏆 4. 실시간 통합 랭킹보드</h4>
+            <ul>
+              <li>단톡방의 모든 유저 기록이 실시간으로 공유되며, [일반]과 [꺼드럭] 뱃지로 모드가 표시됩니다.</li>
+              <li>탈락 시 층수 실력에 따라 찰진 팩폭 도발 문구가 출력됩니다.</li>
+            </ul>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="close-help-btn">확인 완료</button>
+      </div>
+    </div>
+
+    <!-- 3. 설정 모달 -->
+    <div class="modal-overlay" id="settings-modal">
       <div class="modal-box">
         <div class="modal-title">설정 & 치트</div>
-        <div class="key-row">
-          <span>방향 전환 키:</span>
-          <button class="key-assign-btn" id="bind-turn-btn"></button>
+        <div class="modal-body">
+          <div class="key-row">
+            <span>방향 전환 키:</span>
+            <button class="key-assign-btn" id="bind-turn-btn"></button>
+          </div>
+          <div class="key-row">
+            <span>오르기 키:</span>
+            <button class="key-assign-btn" id="bind-climb-btn"></button>
+          </div>
+          <div style="font-size: 11px; color: #94a3b8; text-align: center; margin-bottom: 8px;">
+            버튼을 누르고 변경할 키를 입력하세요.
+          </div>
+          
+          <button id="mode-toggle-btn">🎮 모드: 일반인 모드 (하트 ON)</button>
+          <button id="golden-rush-btn">⚡ Golden Rush (+30F)</button>
         </div>
-        <div class="key-row">
-          <span>오르기 키:</span>
-          <button class="key-assign-btn" id="bind-climb-btn"></button>
-        </div>
-        <div style="font-size: 11px; color: #94a3b8; text-align: center; margin-bottom: 8px;">
-          버튼을 누르고 변경할 키를 입력하세요.
-        </div>
-        
-        <button id="mode-toggle-btn">🎮 모드: 일반인 모드 (하트 ON)</button>
-        <button id="golden-rush-btn">⚡ Golden Rush (+30F)</button>
         <button class="modal-close-btn" id="close-modal-btn">설정 완료</button>
       </div>
     </div>
   </div>
 
+  <!-- 우측 실시간 통합 랭킹 게시판 -->
   <div id="history-panel">
     <div class="panel-header">
-      <span class="panel-title">🏆 RECENT 20 RUNS</span>
-      <button class="panel-clear-btn" id="clear-history-btn">초기화</button>
-    </div>
-
-    <div class="history-tab-bar">
-      <button class="history-tab-btn active normal" id="tab-normal">일반인 모드</button>
-      <button class="history-tab-btn hardcore" id="tab-hardcore">꺼드럭 모드</button>
+      <div class="panel-title">
+        <span>🏆 LIVE RANKING</span>
+        <span class="user-tag" id="current-user-display" title="닉네임 변경">[게스트]</span>
+      </div>
+      <span style="font-size: 10px; color: #00f2fe;">● 실시간 동기화</span>
     </div>
 
     <div class="history-table-wrap">
       <table class="history-table">
         <thead>
           <tr>
-            <th style="width: 15%;">#</th>
-            <th style="width: 40%;">캐릭터</th>
-            <th style="width: 25%;">기록</th>
-            <th style="width: 20%;">시간</th>
+            <th style="width: 12%;">#</th>
+            <th style="width: 34%;">플레이어</th>
+            <th style="width: 28%;">기록/모드</th>
+            <th style="width: 26%;">시간</th>
           </tr>
         </thead>
-        <tbody id="history-body"></tbody>
+        <tbody id="history-body">
+          <tr><td colspan="4" class="empty-state">실시간 랭킹 연결 중...</td></tr>
+        </tbody>
       </table>
     </div>
   </div>
 </div>
 
+<!-- ==========================================
+     Firebase Realtime Database SDK (ES Module)
+     ========================================== -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+  import { getDatabase, ref, push, onValue, query, orderByChild, limitToLast } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAuF-mVvKAPcx6s9MCVGyLuiAG0LgIshbY",
+    authDomain: "cosmic-infinite-stairs.firebaseapp.com",
+    databaseURL: "https://cosmic-infinite-stairs-default-rtdb.firebaseio.com",
+    projectId: "cosmic-infinite-stairs",
+    storageBucket: "cosmic-infinite-stairs.firebasestorage.app",
+    messagingSenderId: "653189042297",
+    appId: "1:653189042297:web:8131ae5fd58fa52fd744a8",
+    measurementId: "G-2Q0CRNP5HM"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const rankingsRef = ref(db, "rankings");
+
+  // 글로벌 바인딩: 점수 업로드 함수
+  window.submitScoreToFirebase = function(finalScore, mode, charIcon, nickname) {
+    if (finalScore <= 0) return;
+    const now = new Date();
+    const timeStr = `${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    push(rankingsRef, {
+      nickname: nickname || "무명 파일럿",
+      score: finalScore,
+      mode: mode,
+      charIcon: charIcon,
+      time: timeStr,
+      timestamp: Date.now()
+    });
+  };
+
+  // 실시간 랭킹 수신 및 UI 렌더링 (TOP 30)
+  const topScoresQuery = query(rankingsRef, orderByChild("score"), limitToLast(30));
+  onValue(topScoresQuery, (snapshot) => {
+    const list = [];
+    snapshot.forEach((child) => {
+      list.push(child.val());
+    });
+    // 내림차순 정렬
+    list.sort((a, b) => b.score - a.score);
+
+    const tbody = document.getElementById("history-body");
+    tbody.innerHTML = "";
+
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" class="empty-state">아직 등록된 랭킹 기록이 없습니다.<br>첫 계단을 올라 1위를 차지하세요!</td></tr>`;
+      return;
+    }
+
+    const maxVal = list[0].score;
+
+    list.forEach((h, idx) => {
+      const tr = document.createElement("tr");
+      const isTop = idx === 0 && maxVal > 0;
+      const modeBadge = h.mode === "normal" 
+        ? `<span class="row-mode normal">일반</span>` 
+        : `<span class="row-mode hardcore">꺼드럭</span>`;
+
+      tr.innerHTML = `
+        <td style="color: ${idx < 3 ? '#ffd700' : '#64748b'}; font-weight: bold;">${idx + 1}</td>
+        <td style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90px;">
+          ${h.charIcon} ${h.nickname}
+        </td>
+        <td>
+          <span class="score-badge ${isTop ? 'top' : ''}">${h.score}F</span>
+          ${modeBadge}
+        </td>
+        <td style="color: #94a3b8; font-size: 10px;">${h.time}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  });
+</script>
+
+<!-- ==========================================
+     게임 메인 코어 엔진 스크립트
+     ========================================== -->
 <script>
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -633,6 +833,48 @@ let lastSafeStair = { x: 0, y: 0 };
 let countdownNumber = 3;
 let countdownTimer = null;
 
+let playerNickname = localStorage.getItem("cosmic_user_nickname") || "";
+const nicknameModal = document.getElementById("nickname-modal");
+const nicknameInput = document.getElementById("player-nickname-input");
+const confirmNicknameBtn = document.getElementById("confirm-nickname-btn");
+const currentUserDisplay = document.getElementById("current-user-display");
+
+function updateNicknameDisplay() {
+  if (playerNickname) {
+    currentUserDisplay.innerText = `[${playerNickname}]`;
+  } else {
+    currentUserDisplay.innerText = `[등록 필요]`;
+  }
+}
+
+function checkNicknameOnStart() {
+  if (!playerNickname) {
+    nicknameModal.style.display = "flex";
+    nicknameInput.focus();
+  } else {
+    nicknameModal.style.display = "none";
+  }
+  updateNicknameDisplay();
+}
+
+confirmNicknameBtn.addEventListener("click", () => {
+  const val = nicknameInput.value.trim();
+  if (val.length === 0) {
+    alert("닉네임을 1자 이상 입력해 주세요!");
+    return;
+  }
+  playerNickname = val;
+  localStorage.setItem("cosmic_user_nickname", playerNickname);
+  nicknameModal.style.display = "none";
+  updateNicknameDisplay();
+});
+
+currentUserDisplay.addEventListener("click", () => {
+  nicknameInput.value = playerNickname;
+  nicknameModal.style.display = "flex";
+  nicknameInput.focus();
+});
+
 const keyBindings = {
   turn: { code: "KeyZ", label: "Z" },
   climb: { code: "KeyX", label: "X" }
@@ -654,90 +896,15 @@ const characters = [
 ];
 let currentSelectedChar = "businessman";
 
-let currentViewTab = "normal";
-let playHistory = [];
-try {
-  const saved = localStorage.getItem("cosmic_stair_history_v2");
-  if (saved) playHistory = JSON.parse(saved);
-} catch (e) {
-  playHistory = [];
-}
-
 function recordGameResult(finalScore) {
+  if (boosterUsed) return;
   const charObj = characters.find(c => c.id === currentSelectedChar) || characters[0];
-  const now = new Date();
-  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-  const entry = {
-    mode: isNormalMode ? "normal" : "hardcore",
-    charIcon: getCharIcon(charObj.id),
-    charName: charObj.name,
-    score: finalScore,
-    time: timeStr
-  };
-
-  playHistory.unshift(entry);
-  if (playHistory.length > 50) {
-    playHistory.pop();
+  const mode = isNormalMode ? "normal" : "hardcore";
+  
+  if (window.submitScoreToFirebase) {
+    window.submitScoreToFirebase(finalScore, mode, getCharIcon(charObj.id), playerNickname);
   }
-
-  try {
-    localStorage.setItem("cosmic_stair_history_v2", JSON.stringify(playHistory));
-  } catch (e) {}
-
-  renderHistoryTable();
 }
-
-function renderHistoryTable() {
-  const tbody = document.getElementById("history-body");
-  tbody.innerHTML = "";
-
-  const filtered = playHistory.filter(h => h.mode === currentViewTab).slice(0, 20);
-
-  if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">[${currentViewTab === 'normal' ? '일반인 모드' : '꺼드럭 모드'}] 기록이 없습니다.<br>계단을 올라 첫 랭킹을 달성하세요!</td></tr>`;
-    return;
-  }
-
-  const maxVal = Math.max(...filtered.map(h => h.score));
-
-  filtered.forEach((h, idx) => {
-    const tr = document.createElement("tr");
-    const isTop = h.score === maxVal && maxVal > 0;
-    tr.innerHTML = `
-      <td style="color: #64748b;">${idx + 1}</td>
-      <td>${h.charIcon} ${h.charName}</td>
-      <td><span class="score-badge ${isTop ? 'top' : ''}">${h.score}F</span></td>
-      <td style="color: #94a3b8; font-size: 11px;">${h.time}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-const tabNormalBtn = document.getElementById("tab-normal");
-const tabHardcoreBtn = document.getElementById("tab-hardcore");
-
-tabNormalBtn.addEventListener("click", () => {
-  currentViewTab = "normal";
-  tabNormalBtn.className = "history-tab-btn active normal";
-  tabHardcoreBtn.className = "history-tab-btn hardcore";
-  renderHistoryTable();
-});
-
-tabHardcoreBtn.addEventListener("click", () => {
-  currentViewTab = "hardcore";
-  tabHardcoreBtn.className = "history-tab-btn active hardcore";
-  tabNormalBtn.className = "history-tab-btn normal";
-  renderHistoryTable();
-});
-
-document.getElementById("clear-history-btn").addEventListener("click", () => {
-  if (confirm(`현재 탭 [${currentViewTab === 'normal' ? '일반인 모드' : '꺼드럭 모드'}] 기록을 모두 초기화하시겠습니까?`)) {
-    playHistory = playHistory.filter(h => h.mode !== currentViewTab);
-    localStorage.setItem("cosmic_stair_history_v2", JSON.stringify(playHistory));
-    renderHistoryTable();
-  }
-});
 
 const player = {
   x: 0,
@@ -839,14 +1006,26 @@ function updateKeyLabels() {
   document.getElementById("bind-climb-btn").innerText = keyBindings.climb.label;
 }
 
+const helpBtn = document.getElementById("help-btn");
+const helpModal = document.getElementById("help-modal");
+const closeHelpBtn = document.getElementById("close-help-btn");
+
 const settingsBtn = document.getElementById("settings-btn");
 const settingsModal = document.getElementById("settings-modal");
 const closeModalBtn = document.getElementById("close-modal-btn");
+
 const bindTurnBtn = document.getElementById("bind-turn-btn");
 const bindClimbBtn = document.getElementById("bind-climb-btn");
 const goldenRushBtn = document.getElementById("golden-rush-btn");
 const modeToggleBtn = document.getElementById("mode-toggle-btn");
 const modeBadge = document.getElementById("mode-badge");
+
+helpBtn.addEventListener("click", () => {
+  helpModal.style.display = "flex";
+});
+closeHelpBtn.addEventListener("click", () => {
+  helpModal.style.display = "none";
+});
 
 function updateModeUI() {
   if (isNormalMode) {
@@ -933,11 +1112,7 @@ function triggerGoldenRush() {
 
 goldenRushBtn.addEventListener("click", triggerGoldenRush);
 
-// ==========================================
-// 스크롤 간섭 차단 및 게임 조작 키 이벤트 핸들러
-// ==========================================
 window.addEventListener("keydown", (e) => {
-  // 브라우저 기본 스크롤을 유발하는 게임 관련 키 목록
   const gameActionKeys = [
     "Space", 
     "ArrowUp", 
@@ -948,12 +1123,10 @@ window.addEventListener("keydown", (e) => {
     keyBindings.climb.code
   ];
 
-  // 게임 조작 관련 키 입력 시 브라우저 페이지 스크롤 무조건 차단
   if (gameActionKeys.includes(e.code)) {
     e.preventDefault();
   }
 
-  // 1. 키 바인딩 설정 중인 경우
   if (listeningTarget) {
     const cleanLabel = e.key === " " ? "SPACE" : (e.key.length === 1 ? e.key.toUpperCase() : e.code.replace("Key", "").replace("Arrow", ""));
     keyBindings[listeningTarget] = { code: e.code, label: cleanLabel };
@@ -964,20 +1137,15 @@ window.addEventListener("keydown", (e) => {
     return;
   }
 
-  // 2. 부스터 자동 등반 또는 부활 카운트다운 중 조작 방지
   if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
-
-  // 키 길게 누름(연타 방지) 차단
   if (e.repeat) return;
 
-  // 3. 게임 오버 시 스페이스바로 즉시 재시작
   if (e.code === "Space" && gameState === "GAMEOVER") {
     initGame();
     gameState = "PLAY";
     return;
   }
 
-  // 4. 이동 및 방향 전환 판정
   if (e.code === keyBindings.turn.code || e.code === "ArrowLeft") {
     step(true);
   } else if (e.code === keyBindings.climb.code || e.code === "ArrowUp") {
@@ -1024,7 +1192,6 @@ function getCharIcon(id) {
   return map[id] || "👤";
 }
 
-// 층수 및 모드 정합성이 완벽히 보정된 도발 문구 생성기
 function getProvocationText(currentScore, isBooster) {
   if (isBooster) {
     const boosterInsults = [
@@ -1059,7 +1226,6 @@ function getProvocationText(currentScore, isBooster) {
     ];
     return list[Math.floor(Math.random() * list.length)];
   } else if (currentScore < 200) {
-    // 200층 미만이므로 하트 언급 절대 배제
     const list = [
       "딱 일반인 수준. 어디 가서 해봤다고 입 열지 마라.",
       "100층 넘었다고 뿌듯했지? 200층 문턱도 못 밟네 애송이.",
@@ -1070,7 +1236,6 @@ function getProvocationText(currentScore, isBooster) {
     ];
     return list[Math.floor(Math.random() * list.length)];
   } else if (currentScore < 350) {
-    // 200층 이상: 실제로 하트가 지급되는 구간에 배치
     const list = [
       "부활 하트 쳐먹고도 꼬라박는 거 보면 능지가 처참하다.",
       "하트 하나 믿고 깝죽대더니 장렬하게 바닥 청소 엔딩.",
@@ -1378,35 +1543,30 @@ function drawHUD() {
     ctx.save();
     ctx.textAlign = "center";
 
-    // 1. GAME OVER 타이틀
     ctx.fillStyle = "#ff007f";
     ctx.font = "900 36px sans-serif";
     ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 50);
 
-    // 2. 점수 현황
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 18px monospace";
     ctx.fillText(`SCORE: ${score} (BEST: ${highScore})`, canvas.width / 2, canvas.height / 2 - 10);
 
-    // 3. 층수별 팩폭 도발 문구
     ctx.fillStyle = "#facc15";
     ctx.font = "bold 13px sans-serif";
     ctx.shadowColor = "#facc15";
     ctx.shadowBlur = 8;
     ctx.fillText(`"${currentProvocation}"`, canvas.width / 2, canvas.height / 2 + 25);
 
-    // 4. 부스터 사용 시에만 경고 출력 (미사용 시 클린 문구 완전 삭제)
     let nextY = canvas.height / 2 + 65;
     if (boosterUsed) {
       ctx.fillStyle = "#ff0055";
       ctx.font = "bold 14px sans-serif";
       ctx.shadowColor = "#ff0055";
       ctx.shadowBlur = 12;
-      ctx.fillText("⚠️ 부스터 사용 감지됨, 꺼드럭 금지", canvas.width / 2, nextY);
+      ctx.fillText("⚠️ 부스터 사용 감지: 랭킹 등록 제외", canvas.width / 2, nextY);
       nextY += 35;
     }
 
-    // 5. 재시작 안내
     ctx.fillStyle = "#a855f7";
     ctx.font = "13px sans-serif";
     ctx.shadowBlur = 0;
@@ -1463,10 +1623,10 @@ function draw() {
   });
 }
 
+checkNicknameOnStart();
 updateModeUI();
 updateKeyLabels();
 renderCharacterRoster();
-renderHistoryTable();
 initGame();
 
 Promise.all([
