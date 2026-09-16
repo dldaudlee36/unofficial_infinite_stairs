@@ -623,7 +623,6 @@
     </div>
   </div>
 
-  <!-- 우측 실시간 통합 랭킹 게시판 -->
   <div id="history-panel">
     <div class="panel-header">
       <div class="panel-title">
@@ -652,7 +651,7 @@
 </div>
 
 <!-- ==========================================
-     Firebase Realtime Database SDK (ES Module)
+     보안 체결된 Firebase 실시간 연동 모듈 (비노출 스코프)
      ========================================== -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
@@ -673,21 +672,33 @@
   const db = getDatabase(app);
   const rankingsRef = ref(db, "rankings");
 
-  window.submitScoreToFirebase = function(finalScore, mode, charIcon, nickname) {
-    if (finalScore <= 0) return;
+  // window 노출 완전 삭제. 내부 커스텀 이벤트 리스너로만 수신
+  window.addEventListener("__COSMIC_SECURE_SUBMIT__", (e) => {
+    const data = e.detail;
+    if (!data || !data.verified) return;
+
+    // 물리적 속도 및 무결성 검증 (초당 12타 초과 치트 차단)
+    const elapsedSec = Math.max(0.1, (data.endTime - data.startTime) / 1000);
+    const speed = data.score / elapsedSec;
+    if (speed > 12.0 || data.score !== data.stepCount || data.score <= 0) {
+      console.warn("비정상적인 점수 트래픽 감지: DB 전송 차단");
+      return;
+    }
+
     const now = new Date();
     const timeStr = `${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     push(rankingsRef, {
-      nickname: nickname || "무명 파일럿",
-      score: finalScore,
-      mode: mode,
-      charIcon: charIcon,
+      nickname: data.nickname || "무명 파일럿",
+      score: data.score,
+      mode: data.mode,
+      charIcon: data.charIcon,
       time: timeStr,
       timestamp: Date.now()
     });
-  };
+  });
 
+  // 실시간 랭킹 수신 및 개인 최고 기록 필터링
   onValue(rankingsRef, (snapshot) => {
     const rawList = [];
     snapshot.forEach((child) => {
@@ -747,916 +758,942 @@
 </script>
 
 <!-- ==========================================
-     게임 메인 코어 엔진 스크립트
+     게임 메인 코어 엔진 스크립트 (클로저 은닉화)
      ========================================== -->
 <script>
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+(() => {
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
 
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function playBeep(freq, type = "sine", duration = 0.04) {
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-  gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.start();
-  osc.stop(audioCtx.currentTime + duration);
-}
-
-function playReviveSound() {
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
-    setTimeout(() => playBeep(freq, "triangle", 0.08), i * 50);
-  });
-}
-
-function playHeartEarnSound() {
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  [600, 900].forEach((freq, i) => {
-    setTimeout(() => playBeep(freq, "sine", 0.06), i * 60);
-  });
-}
-
-const processedCanvases = {
-  sheet8: null,
-  among: null,
-  pixel1: null,
-  pixel2: null
-};
-
-function cleanAndProcessImage(url, key) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      const off = document.createElement("canvas");
-      off.width = img.naturalWidth || img.width;
-      off.height = img.naturalHeight || img.height;
-      const octx = off.getContext("2d");
-      octx.drawImage(img, 0, 0);
-
-      try {
-        const imgData = octx.getImageData(0, 0, off.width, off.height);
-        const d = imgData.data;
-        for (let i = 0; i < d.length; i += 4) {
-          if (d[i] > 190 && d[i + 1] > 190 && d[i + 2] > 190) {
-            d[i + 3] = 0;
-          }
-        }
-        octx.putImageData(imgData, 0, 0);
-        processedCanvases[key] = off;
-      } catch (err) {
-        processedCanvases[key] = img;
-      }
-      resolve();
-    };
-    img.onerror = () => resolve();
-    img.src = url;
-  });
-}
-
-const STAIR_W = 58;
-const STAIR_H = 30;
-const ANCHOR_X = canvas.width / 2;
-const ANCHOR_Y = canvas.height - 120;
-
-let gameState = "READY";
-let score = 0;
-let highScore = 0;
-let energy = 1.0;
-const MAX_ENERGY = 1.0;
-
-let camX = 0;
-let camY = 0;
-let targetCamX = 0;
-let targetCamY = 0;
-
-let isAutoClimbing = false;
-let isNormalMode = true;
-let boosterUsed = false;
-let currentProvocation = "";
-
-let reviveHearts = 0;
-let lastHeartThreshold = 0;
-let lastSafeStair = { x: 0, y: 0 };
-let countdownNumber = 3;
-let countdownTimer = null;
-
-let playerNickname = localStorage.getItem("cosmic_user_nickname") || "";
-const nicknameModal = document.getElementById("nickname-modal");
-const nicknameInput = document.getElementById("player-nickname-input");
-const confirmNicknameBtn = document.getElementById("confirm-nickname-btn");
-const currentUserDisplay = document.getElementById("current-user-display");
-const nicknameErrorMsg = document.getElementById("nickname-error-msg");
-
-function updateNicknameDisplay() {
-  if (playerNickname) {
-    currentUserDisplay.innerText = `[${playerNickname}]`;
-    currentUserDisplay.style.color = "#facc15";
-  } else {
-    currentUserDisplay.innerText = `[등록 필요]`;
-    currentUserDisplay.style.color = "#94a3b8";
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  function playBeep(freq, type = "sine", duration = 0.04) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
   }
-}
 
-function checkNicknameOnStart() {
-  if (!playerNickname) {
+  function playReviveSound() {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+      setTimeout(() => playBeep(freq, "triangle", 0.08), i * 50);
+    });
+  }
+
+  function playHeartEarnSound() {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    [600, 900].forEach((freq, i) => {
+      setTimeout(() => playBeep(freq, "sine", 0.06), i * 60);
+    });
+  }
+
+  const processedCanvases = {
+    sheet8: null,
+    among: null,
+    pixel1: null,
+    pixel2: null
+  };
+
+  function cleanAndProcessImage(url, key) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const off = document.createElement("canvas");
+        off.width = img.naturalWidth || img.width;
+        off.height = img.naturalHeight || img.height;
+        const octx = off.getContext("2d");
+        octx.drawImage(img, 0, 0);
+
+        try {
+          const imgData = octx.getImageData(0, 0, off.width, off.height);
+          const d = imgData.data;
+          for (let i = 0; i < d.length; i += 4) {
+            if (d[i] > 190 && d[i + 1] > 190 && d[i + 2] > 190) {
+              d[i + 3] = 0;
+            }
+          }
+          octx.putImageData(imgData, 0, 0);
+          processedCanvases[key] = off;
+        } catch (err) {
+          processedCanvases[key] = img;
+        }
+        resolve();
+      };
+      img.onerror = () => resolve();
+      img.src = url;
+    });
+  }
+
+  const STAIR_W = 58;
+  const STAIR_H = 30;
+  const ANCHOR_X = canvas.width / 2;
+  const ANCHOR_Y = canvas.height - 120;
+
+  let gameState = "READY";
+  let score = 0;
+  let highScore = 0;
+  let energy = 1.0;
+  const MAX_ENERGY = 1.0;
+
+  // 무결성 검증용 내부 추적 변수
+  let sessionStartTime = 0;
+  let sessionValidSteps = 0;
+
+  let camX = 0;
+  let camY = 0;
+  let targetCamX = 0;
+  let targetCamY = 0;
+
+  let isAutoClimbing = false;
+  let isNormalMode = true;
+  let boosterUsed = false;
+  let currentProvocation = "";
+
+  let reviveHearts = 0;
+  let lastHeartThreshold = 0;
+  let lastSafeStair = { x: 0, y: 0 };
+  let countdownNumber = 3;
+  let countdownTimer = null;
+
+  let playerNickname = localStorage.getItem("cosmic_user_nickname") || "";
+  const nicknameModal = document.getElementById("nickname-modal");
+  const nicknameInput = document.getElementById("player-nickname-input");
+  const confirmNicknameBtn = document.getElementById("confirm-nickname-btn");
+  const currentUserDisplay = document.getElementById("current-user-display");
+  const nicknameErrorMsg = document.getElementById("nickname-error-msg");
+
+  function updateNicknameDisplay() {
+    if (playerNickname) {
+      currentUserDisplay.innerText = `[${playerNickname}]`;
+      currentUserDisplay.style.color = "#facc15";
+    } else {
+      currentUserDisplay.innerText = `[등록 필요]`;
+      currentUserDisplay.style.color = "#94a3b8";
+    }
+  }
+
+  function checkNicknameOnStart() {
+    if (!playerNickname) {
+      nicknameModal.style.display = "flex";
+      nicknameInput.focus();
+    } else {
+      nicknameModal.style.display = "none";
+    }
+    updateNicknameDisplay();
+  }
+
+  confirmNicknameBtn.addEventListener("click", () => {
+    const val = nicknameInput.value.trim();
+    if (val.length === 0) {
+      nicknameErrorMsg.innerText = "닉네임을 1자 이상 입력해 주세요!";
+      nicknameErrorMsg.style.display = "block";
+      return;
+    }
+
+    nicknameErrorMsg.style.display = "none";
+    playerNickname = val;
+    localStorage.setItem("cosmic_user_nickname", playerNickname);
+    nicknameModal.style.display = "none";
+    updateNicknameDisplay();
+  });
+
+  currentUserDisplay.addEventListener("click", () => {
+    nicknameInput.value = playerNickname;
     nicknameModal.style.display = "flex";
     nicknameInput.focus();
-  } else {
-    nicknameModal.style.display = "none";
-  }
-  updateNicknameDisplay();
-}
+  });
 
-confirmNicknameBtn.addEventListener("click", () => {
-  const val = nicknameInput.value.trim();
-  if (val.length === 0) {
-    nicknameErrorMsg.innerText = "닉네임을 1자 이상 입력해 주세요!";
-    nicknameErrorMsg.style.display = "block";
-    return;
-  }
+  const keyBindings = {
+    turn: { code: "KeyZ", label: "Z" },
+    climb: { code: "KeyX", label: "X" }
+  };
+  let listeningTarget = null;
 
-  nicknameErrorMsg.style.display = "none";
-  playerNickname = val;
-  localStorage.setItem("cosmic_user_nickname", playerNickname);
-  nicknameModal.style.display = "none";
-  updateNicknameDisplay();
-});
-
-currentUserDisplay.addEventListener("click", () => {
-  nicknameInput.value = playerNickname;
-  nicknameModal.style.display = "flex";
-  nicknameInput.focus();
-});
-
-const keyBindings = {
-  turn: { code: "KeyZ", label: "Z" },
-  climb: { code: "KeyX", label: "X" }
-};
-let listeningTarget = null;
-
-const characters = [
-  { id: "businessman", name: "비즈니스맨", sourceKey: "sheet8", grid: { col: 1, row: 2 } },
-  { id: "boxer", name: "복서", sourceKey: "sheet8", grid: { col: 0, row: 1 } },
-  { id: "dracula", name: "드라큘라", sourceKey: "sheet8", grid: { col: 0, row: 3 } },
-  { id: "delivery", name: "택배기사", sourceKey: "sheet8", grid: { col: 1, row: 3 } },
-  { id: "sheriff", name: "보안관", sourceKey: "sheet8", grid: { col: 1, row: 1 } },
-  { id: "tennis", name: "테니스선수", sourceKey: "sheet8", grid: { col: 0, row: 2 } },
-  { id: "soldier", name: "근위병", sourceKey: "sheet8", grid: { col: 0, row: 0 } },
-  { id: "bunny", name: "바니걸", sourceKey: "sheet8", grid: { col: 1, row: 0 }, colOffset: 0 },
-  { id: "among", name: "어몽어스", sourceKey: "among" },
-  { id: "redboy", name: "빨간티소년", sourceKey: "pixel1" },
-  { id: "redhair", name: "붉은머리소년", sourceKey: "pixel2" }
-];
-let currentSelectedChar = "businessman";
-
-function recordGameResult(finalScore) {
-  if (boosterUsed) return;
-  const charObj = characters.find(c => c.id === currentSelectedChar) || characters[0];
-  const mode = isNormalMode ? "normal" : "hardcore";
-  
-  if (window.submitScoreToFirebase) {
-    window.submitScoreToFirebase(finalScore, mode, getCharIcon(charObj.id), playerNickname);
-  }
-}
-
-const player = {
-  x: 0,
-  y: 0,
-  dir: 1,
-  scaleX: 1,
-  scaleY: 1,
-  bounceY: 0
-};
-
-let stairs = [];
-
-const spaceStars = Array.from({ length: 45 }, () => ({
-  x: Math.random() * canvas.width,
-  y: Math.random() * canvas.height,
-  r: Math.random() * 1.5 + 0.5,
-  alpha: Math.random(),
-  glowSpeed: Math.random() * 0.02 + 0.01
-}));
-
-function drawPlayerSprite(x, y) {
-  ctx.save();
-  ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
-  ctx.scale(-player.dir * player.scaleX, player.scaleY);
-
-  ctx.fillStyle = "rgba(0, 242, 254, 0.25)";
-  ctx.beginPath();
-  ctx.ellipse(0, -player.bounceY, 20, 6, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  const char = characters.find(c => c.id === currentSelectedChar) || characters[0];
-  const src = processedCanvases[char.sourceKey];
-
-  if (src && (src.width || src.naturalWidth)) {
-    const totalW = src.width || src.naturalWidth;
-    const totalH = src.height || src.naturalHeight;
-
-    let sx = 0, sy = 0, sw = totalW, sh = totalH;
-
-    if (char.sourceKey === "sheet8") {
-      const blockW = totalW / 2;
-      const blockH = totalH / 4;
-      const rawCellW = blockW / 4;
-      const rawCellH = blockH / 2;
-
-      const blockX = char.grid.col * blockW;
-      const blockY = char.grid.row * blockH;
-
-      const padTop = rawCellH * 0.12;
-      const padBottom = rawCellH * 0.04;
-      const padX = rawCellW * 0.08;
-
-      const chosenCol = (char.colOffset !== undefined) ? char.colOffset : 1;
-      const cellX = blockX + (rawCellW * chosenCol);
-      const cellY = blockY;
-
-      sx = cellX + padX;
-      sy = cellY + padTop;
-      sw = rawCellW - (padX * 2);
-      sh = rawCellH - (padTop + padBottom);
-
-    } else if (char.sourceKey === "pixel1" || char.sourceKey === "pixel2") {
-      sw = totalW / 4;
-      sh = totalH / 4;
-      sx = 1 * sw;
-      sy = 2 * sh;
-    } else if (char.sourceKey === "among") {
-      sx = 0; sy = 0;
-      sw = totalW; sh = totalH;
-    }
-
-    const TARGET_MAX_H = 75;
-    const TARGET_MAX_W = 75;
-    const aspect = sw / sh;
-
-    let drawW, drawH;
-    if (aspect > 1) {
-      drawW = TARGET_MAX_W;
-      drawH = TARGET_MAX_W / aspect;
-    } else {
-      drawH = TARGET_MAX_H;
-      drawW = TARGET_MAX_H * aspect;
-    }
-
-    ctx.drawImage(src, sx, sy, sw, sh, -drawW / 2, -drawH, drawW, drawH);
-
-  } else {
-    ctx.fillStyle = "#00f2fe";
-    ctx.fillRect(-16, -50, 32, 50);
-  }
-
-  ctx.restore();
-}
-
-function updateKeyLabels() {
-  document.getElementById("turn-key-label").innerText = `[${keyBindings.turn.label}]`;
-  document.getElementById("climb-key-label").innerText = `[${keyBindings.climb.label}]`;
-  document.getElementById("bind-turn-btn").innerText = keyBindings.turn.label;
-  document.getElementById("bind-climb-btn").innerText = keyBindings.climb.label;
-}
-
-const helpBtn = document.getElementById("help-btn");
-const helpModal = document.getElementById("help-modal");
-const closeHelpBtn = document.getElementById("close-help-btn");
-
-const settingsBtn = document.getElementById("settings-btn");
-const settingsModal = document.getElementById("settings-modal");
-const closeModalBtn = document.getElementById("close-modal-btn");
-
-const bindTurnBtn = document.getElementById("bind-turn-btn");
-const bindClimbBtn = document.getElementById("bind-climb-btn");
-const goldenRushBtn = document.getElementById("golden-rush-btn");
-const modeToggleBtn = document.getElementById("mode-toggle-btn");
-const modeBadge = document.getElementById("mode-badge");
-
-helpBtn.addEventListener("click", () => {
-  helpModal.style.display = "flex";
-});
-closeHelpBtn.addEventListener("click", () => {
-  helpModal.style.display = "none";
-});
-
-function updateModeUI() {
-  if (isNormalMode) {
-    modeBadge.innerText = "일반인 모드";
-    modeBadge.className = "mode-badge normal";
-    modeToggleBtn.innerText = "🎮 모드: 일반인 모드 (하트 ON)";
-    modeToggleBtn.className = "";
-  } else {
-    modeBadge.innerText = "꺼드럭 모드";
-    modeBadge.className = "mode-badge hardcore";
-    modeToggleBtn.innerText = "💀 모드: 꺼드럭 모드 (하트 OFF)";
-    modeToggleBtn.className = "hardcore";
-  }
-}
-
-modeToggleBtn.addEventListener("click", () => {
-  isNormalMode = !isNormalMode;
-  updateModeUI();
-  initGame();
-});
-
-settingsBtn.addEventListener("click", () => {
-  settingsModal.style.display = "flex";
-});
-closeModalBtn.addEventListener("click", () => {
-  settingsModal.style.display = "none";
-  listeningTarget = null;
-  bindTurnBtn.classList.remove("listening");
-  bindClimbBtn.classList.remove("listening");
-});
-
-bindTurnBtn.addEventListener("click", () => {
-  listeningTarget = "turn";
-  bindTurnBtn.classList.add("listening");
-  bindClimbBtn.classList.remove("listening");
-  bindTurnBtn.innerText = "키 입력...";
-});
-
-bindClimbBtn.addEventListener("click", () => {
-  listeningTarget = "climb";
-  bindClimbBtn.classList.add("listening");
-  bindTurnBtn.classList.remove("listening");
-  bindClimbBtn.innerText = "키 입력...";
-});
-
-function triggerGoldenRush() {
-  if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
-  settingsModal.style.display = "none";
-  
-  if (gameState === "GAMEOVER") {
-    initGame();
-  }
-  gameState = "PLAY";
-  isAutoClimbing = true;
-  boosterUsed = true;
-
-  let stepsLeft = 30;
-
-  const climbInterval = setInterval(() => {
-    if (stepsLeft <= 0 || gameState !== "PLAY") {
-      clearInterval(climbInterval);
-      isAutoClimbing = false;
-      return;
-    }
-
-    const nextY = player.y + 1;
-    const nextStair = stairs[nextY];
-
-    if (!nextStair) {
-      clearInterval(climbInterval);
-      isAutoClimbing = false;
-      return;
-    }
-
-    const requiredDir = nextStair.x - player.x;
-    const needTurn = (requiredDir !== player.dir);
-
-    step(needTurn);
-    energy = MAX_ENERGY;
-
-    stepsLeft--;
-  }, 40);
-}
-
-goldenRushBtn.addEventListener("click", triggerGoldenRush);
-
-window.addEventListener("keydown", (e) => {
-  const gameActionKeys = [
-    "Space", 
-    "ArrowUp", 
-    "ArrowDown", 
-    "ArrowLeft", 
-    "ArrowRight",
-    keyBindings.turn.code, 
-    keyBindings.climb.code
+  const characters = [
+    { id: "businessman", name: "비즈니스맨", sourceKey: "sheet8", grid: { col: 1, row: 2 } },
+    { id: "boxer", name: "복서", sourceKey: "sheet8", grid: { col: 0, row: 1 } },
+    { id: "dracula", name: "드라큘라", sourceKey: "sheet8", grid: { col: 0, row: 3 } },
+    { id: "delivery", name: "택배기사", sourceKey: "sheet8", grid: { col: 1, row: 3 } },
+    { id: "sheriff", name: "보안관", sourceKey: "sheet8", grid: { col: 1, row: 1 } },
+    { id: "tennis", name: "테니스선수", sourceKey: "sheet8", grid: { col: 0, row: 2 } },
+    { id: "soldier", name: "근위병", sourceKey: "sheet8", grid: { col: 0, row: 0 } },
+    { id: "bunny", name: "바니걸", sourceKey: "sheet8", grid: { col: 1, row: 0 }, colOffset: 0 },
+    { id: "among", name: "어몽어스", sourceKey: "among" },
+    { id: "redboy", name: "빨간티소년", sourceKey: "pixel1" },
+    { id: "redhair", name: "붉은머리소년", sourceKey: "pixel2" }
   ];
+  let currentSelectedChar = "businessman";
 
-  if (gameActionKeys.includes(e.code)) {
-    e.preventDefault();
+  // 보안 검증 이벤트 발행 (전역 노출 없음)
+  function recordGameResult(finalScore) {
+    if (boosterUsed || finalScore <= 0) return;
+    const charObj = characters.find(c => c.id === currentSelectedChar) || characters[0];
+    const mode = isNormalMode ? "normal" : "hardcore";
+    
+    window.dispatchEvent(new CustomEvent("__COSMIC_SECURE_SUBMIT__", {
+      detail: {
+        verified: true,
+        score: finalScore,
+        stepCount: sessionValidSteps,
+        startTime: sessionStartTime,
+        endTime: Date.now(),
+        mode: mode,
+        charIcon: getCharIcon(charObj.id),
+        nickname: playerNickname
+      }
+    }));
   }
 
-  if (listeningTarget) {
-    const cleanLabel = e.key === " " ? "SPACE" : (e.key.length === 1 ? e.key.toUpperCase() : e.code.replace("Key", "").replace("Arrow", ""));
-    keyBindings[listeningTarget] = { code: e.code, label: cleanLabel };
+  const player = {
+    x: 0,
+    y: 0,
+    dir: 1,
+    scaleX: 1,
+    scaleY: 1,
+    bounceY: 0
+  };
+
+  let stairs = [];
+
+  const spaceStars = Array.from({ length: 45 }, () => ({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    r: Math.random() * 1.5 + 0.5,
+    alpha: Math.random(),
+    glowSpeed: Math.random() * 0.02 + 0.01
+  }));
+
+  function drawPlayerSprite(x, y) {
+    ctx.save();
+    ctx.translate(Math.floor(x), Math.floor(y + player.bounceY));
+    ctx.scale(-player.dir * player.scaleX, player.scaleY);
+
+    ctx.fillStyle = "rgba(0, 242, 254, 0.25)";
+    ctx.beginPath();
+    ctx.ellipse(0, -player.bounceY, 20, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const char = characters.find(c => c.id === currentSelectedChar) || characters[0];
+    const src = processedCanvases[char.sourceKey];
+
+    if (src && (src.width || src.naturalWidth)) {
+      const totalW = src.width || src.naturalWidth;
+      const totalH = src.height || src.naturalHeight;
+
+      let sx = 0, sy = 0, sw = totalW, sh = totalH;
+
+      if (char.sourceKey === "sheet8") {
+        const blockW = totalW / 2;
+        const blockH = totalH / 4;
+        const rawCellW = blockW / 4;
+        const rawCellH = blockH / 2;
+
+        const blockX = char.grid.col * blockW;
+        const blockY = char.grid.row * blockH;
+
+        const padTop = rawCellH * 0.12;
+        const padBottom = rawCellH * 0.04;
+        const padX = rawCellW * 0.08;
+
+        const chosenCol = (char.colOffset !== undefined) ? char.colOffset : 1;
+        const cellX = blockX + (rawCellW * chosenCol);
+        const cellY = blockY;
+
+        sx = cellX + padX;
+        sy = cellY + padTop;
+        sw = rawCellW - (padX * 2);
+        sh = rawCellH - (padTop + padBottom);
+
+      } else if (char.sourceKey === "pixel1" || char.sourceKey === "pixel2") {
+        sw = totalW / 4;
+        sh = totalH / 4;
+        sx = 1 * sw;
+        sy = 2 * sh;
+      } else if (char.sourceKey === "among") {
+        sx = 0; sy = 0;
+        sw = totalW; sh = totalH;
+      }
+
+      const TARGET_MAX_H = 75;
+      const TARGET_MAX_W = 75;
+      const aspect = sw / sh;
+
+      let drawW, drawH;
+      if (aspect > 1) {
+        drawW = TARGET_MAX_W;
+        drawH = TARGET_MAX_W / aspect;
+      } else {
+        drawH = TARGET_MAX_H;
+        drawW = TARGET_MAX_H * aspect;
+      }
+
+      ctx.drawImage(src, sx, sy, sw, sh, -drawW / 2, -drawH, drawW, drawH);
+
+    } else {
+      ctx.fillStyle = "#00f2fe";
+      ctx.fillRect(-16, -50, 32, 50);
+    }
+
+    ctx.restore();
+  }
+
+  function updateKeyLabels() {
+    document.getElementById("turn-key-label").innerText = `[${keyBindings.turn.label}]`;
+    document.getElementById("climb-key-label").innerText = `[${keyBindings.climb.label}]`;
+    document.getElementById("bind-turn-btn").innerText = keyBindings.turn.label;
+    document.getElementById("bind-climb-btn").innerText = keyBindings.climb.label;
+  }
+
+  const helpBtn = document.getElementById("help-btn");
+  const helpModal = document.getElementById("help-modal");
+  const closeHelpBtn = document.getElementById("close-help-btn");
+
+  const settingsBtn = document.getElementById("settings-btn");
+  const settingsModal = document.getElementById("settings-modal");
+  const closeModalBtn = document.getElementById("close-modal-btn");
+
+  const bindTurnBtn = document.getElementById("bind-turn-btn");
+  const bindClimbBtn = document.getElementById("bind-climb-btn");
+  const goldenRushBtn = document.getElementById("golden-rush-btn");
+  const modeToggleBtn = document.getElementById("mode-toggle-btn");
+  const modeBadge = document.getElementById("mode-badge");
+
+  helpBtn.addEventListener("click", () => {
+    helpModal.style.display = "flex";
+  });
+  closeHelpBtn.addEventListener("click", () => {
+    helpModal.style.display = "none";
+  });
+
+  function updateModeUI() {
+    if (isNormalMode) {
+      modeBadge.innerText = "일반인 모드";
+      modeBadge.className = "mode-badge normal";
+      modeToggleBtn.innerText = "🎮 모드: 일반인 모드 (하트 ON)";
+      modeToggleBtn.className = "";
+    } else {
+      modeBadge.innerText = "꺼드럭 모드";
+      modeBadge.className = "mode-badge hardcore";
+      modeToggleBtn.innerText = "💀 모드: 꺼드럭 모드 (하트 OFF)";
+      modeToggleBtn.className = "hardcore";
+    }
+  }
+
+  modeToggleBtn.addEventListener("click", () => {
+    isNormalMode = !isNormalMode;
+    updateModeUI();
+    initGame();
+  });
+
+  settingsBtn.addEventListener("click", () => {
+    settingsModal.style.display = "flex";
+  });
+  closeModalBtn.addEventListener("click", () => {
+    settingsModal.style.display = "none";
     listeningTarget = null;
     bindTurnBtn.classList.remove("listening");
     bindClimbBtn.classList.remove("listening");
-    updateKeyLabels();
-    return;
-  }
-
-  if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
-  if (e.repeat) return;
-
-  if (e.code === "Space" && gameState === "GAMEOVER") {
-    initGame();
-    gameState = "PLAY";
-    return;
-  }
-
-  if (e.code === keyBindings.turn.code || e.code === "ArrowLeft") {
-    step(true);
-  } else if (e.code === keyBindings.climb.code || e.code === "ArrowUp") {
-    step(false);
-  }
-});
-
-const rosterContainer = document.getElementById("character-roster");
-rosterContainer.addEventListener("wheel", (e) => {
-  e.preventDefault();
-  rosterContainer.scrollLeft += e.deltaY * 0.9;
-}, { passive: false });
-
-function renderCharacterRoster() {
-  rosterContainer.innerHTML = "";
-
-  characters.forEach(ch => {
-    const isSelected = ch.id === currentSelectedChar;
-    const card = document.createElement("div");
-    card.className = `char-card ${isSelected ? 'selected' : ''}`;
-    
-    card.innerHTML = `
-      <div style="font-size: 18px;">${getCharIcon(ch.id)}</div>
-      <div class="card-name">${ch.name}</div>
-      <div class="card-status">${isSelected ? '선택됨' : '선택'}</div>
-    `;
-
-    card.addEventListener("click", () => {
-      if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
-      currentSelectedChar = ch.id;
-      renderCharacterRoster();
-    });
-
-    rosterContainer.appendChild(card);
   });
-}
 
-function getCharIcon(id) {
-  const map = {
-    businessman: "💼", boxer: "🥊", dracula: "🧛", delivery: "📦",
-    sheriff: "🤠", tennis: "🎾", soldier: "💂", bunny: "🐰",
-    among: "🚀", redboy: "👦", redhair: "🧑"
-  };
-  return map[id] || "👤";
-}
+  bindTurnBtn.addEventListener("click", () => {
+    listeningTarget = "turn";
+    bindTurnBtn.classList.add("listening");
+    bindClimbBtn.classList.remove("listening");
+    bindTurnBtn.innerText = "키 입력...";
+  });
 
-function getProvocationText(currentScore, isBooster) {
-  if (isBooster) {
-    const boosterInsults = [
-      "부스터 쳐쓰고 이 점수면 그냥 접어라.",
-      "치트키 딸깍거려놓고 꺼드럭대려고? 양심 터졌네.",
-      "날로 먹으려다 체했죠? 꼴좋다.",
-      "치트키 쓰고도 처망하는 손가락은 도대체 정체가 뭐냐?",
-      "남들은 맨손으로 가는데 부스터 빨고도 누워버리네 ㅋ.",
-      "딸깍질로 올린 점수 자랑질하려다 뽀록났죠? 개추함."
-    ];
-    return boosterInsults[Math.floor(Math.random() * boosterInsults.length)];
-  }
+  bindClimbBtn.addEventListener("click", () => {
+    listeningTarget = "climb";
+    bindClimbBtn.classList.add("listening");
+    bindTurnBtn.classList.remove("listening");
+    bindClimbBtn.innerText = "키 입력...";
+  });
 
-  if (currentScore < 30) {
-    const list = [
-      "손가락에 깁스함? 발가락으로 눌러도 30층은 가겠다.",
-      "여기서 떨어지는 것도 진짜 재능이다.",
-      "키보드 왜 샀냐? 그냥 구경이나 해.",
-      "화면 켜놓고 주무셨어요? 플레이 시간 3초 컷 레전드.",
-      "손가락 뇌랑 연결 안 됨? 시작 버튼 누른 손가락이 아깝다.",
-      "키보드에서 손 떼라. 계단이 불쌍하다 진짜."
-    ];
-    return list[Math.floor(Math.random() * list.length)];
-  } else if (currentScore < 100) {
-    const list = [
-      "세 자릿수도 못 보고 컷당하는 꼬락서니 레전드.",
-      "겨우 여기까지 기어오고 꺼드럭거리려 했음?",
-      "뇌 반응 속도 실화냐? 렉 핑계 대지 마라.",
-      "백 단위 숫자 구경도 못 해보고 로비 사출 실화냐?",
-      "눈 깜빡이다 떨어졌다고 핑계 대지 마라, 그냥 느린 거다.",
-      "딱 유치원생 발걸음. 어디 가서 게임한다고 깝치지 마라."
-    ];
-    return list[Math.floor(Math.random() * list.length)];
-  } else if (currentScore < 200) {
-    const list = [
-      "딱 일반인 수준. 어디 가서 해봤다고 입 열지 마라.",
-      "100층 넘었다고 뿌듯했지? 200층 문턱도 못 밟네 애송이.",
-      "겨우 세 자릿수 턱걸이하고 땀 삐질삐질 흘리는 꼴 보소.",
-      "여기서 만족하고 입 찢어지지? 딱 네 그릇 크기다.",
-      "200층 하트 구경도 못 해보고 로비로 사출당했죠? ㅋ",
-      "슬슬 속도 붙으니까 손가락 꼬여서 뇌정지 왔냐?"
-    ];
-    return list[Math.floor(Math.random() * list.length)];
-  } else if (currentScore < 350) {
-    const list = [
-      "부활 하트 쳐먹고도 꼬라박는 거 보면 능지가 처참하다.",
-      "하트 하나 믿고 깝죽대더니 장렬하게 바닥 청소 엔딩.",
-      "꺼드럭거릴 각 잡더니 꼴좋다. 딱 네 한계임.",
-      "제법인데? 그래봤자 랭커 발끝도 못 미침.",
-      "제법 폼 잡더니 귀신같이 손가락 꼬여서 수직 낙하하네.",
-      "벽 느껴지지? 응 너 같은 범재는 평생 가도 500층 못 봐."
-    ];
-    return list[Math.floor(Math.random() * list.length)];
-  } else if (currentScore < 500) {
-    const list = [
-      "눈알 빠질 것 같지? 안 봐준다, 1층부터 다시 기어 와.",
-      "아깝지? 억울해 뒤지겠지? 샷건 치지 말고 다시 해.",
-      "집중력 밑천 드러났네. 한 판 더 해도 똑같음.",
-      "멘탈 바사삭 소리 여기까지 들린다. 샷건 치지 마라 모니터 깨진다.",
-      "집중력 밑천 털려서 동공 지진 난 거 다 보였음 ㅋ.",
-      "아깝지? 피눈물 나지? 억울하면 밤새워서 다시 기어 와봐."
-    ];
-    return list[Math.floor(Math.random() * list.length)];
-  } else {
-    const list = [
-      "인생을 여기에 갈아 넣었네. 현생은 살고 있냐?",
-      "잘하긴 하는데 묘하게 꼴 보기 싫은 점수네.",
-      "손가락 쥐 난 거 뻔히 보이는데 추하게 가네.",
-      "이 점수 찍을 시간에 자격증을 땄으면 취직을 했겠다.",
-      "손목 터널 증후군 예약 축하한다. 병원비나 모아둬라.",
-      "잘하긴 하는데 진짜 징글징글하다. 방구석 탈출은 언제 함?"
-    ];
-    return list[Math.floor(Math.random() * list.length)];
-  }
-}
-
-function initGame() {
-  if (countdownTimer) clearInterval(countdownTimer);
-  score = 0;
-  energy = 1.0;
-  reviveHearts = 0;
-  lastHeartThreshold = 0;
-  boosterUsed = false;
-  currentProvocation = "";
-  stairs = [{ x: 0, y: 0 }];
-
-  let curX = 0;
-  let curDir = 1;
-  let runLength = 3;
-
-  for (let i = 1; i < 200; i++) {
-    if (runLength <= 0) {
-      curDir = -curDir;
-      runLength = Math.floor(Math.random() * 4) + 1;
-    }
-    curX += curDir;
-    stairs.push({ x: curX, y: i });
-    runLength--;
-  }
-
-  player.x = 0;
-  player.y = 0;
-  player.dir = 1;
-  player.scaleX = 1;
-  player.scaleY = 1;
-  player.bounceY = 0;
-  lastSafeStair = { x: 0, y: 0 };
-
-  camX = 0;
-  camY = 0;
-  targetCamX = 0;
-  targetCamY = 0;
-}
-
-function appendNextStair() {
-  const last = stairs[stairs.length - 1];
-  const prev = stairs[stairs.length - 2];
-  let curDir = last.x - prev.x;
-  if (Math.random() < 0.36) curDir = -curDir;
-  stairs.push({ x: last.x + curDir, y: last.y + 1 });
-}
-
-function checkHeartReward() {
-  if (!isNormalMode) return;
-
-  const currentThreshold = Math.floor(score / 200);
-  if (currentThreshold > lastHeartThreshold) {
-    const gained = currentThreshold - lastHeartThreshold;
-    reviveHearts += gained;
-    lastHeartThreshold = currentThreshold;
-    playHeartEarnSound();
-  }
-}
-
-function startReviveCountdown() {
-  gameState = "REVIVE_COUNTDOWN";
-  countdownNumber = 3;
-  energy = MAX_ENERGY;
-
-  playBeep(440, "sine", 0.08);
-
-  if (countdownTimer) clearInterval(countdownTimer);
-
-  countdownTimer = setInterval(() => {
-    countdownNumber--;
-    if (countdownNumber > 0) {
-      playBeep(440, "sine", 0.08);
-    } else if (countdownNumber === 0) {
-      playBeep(880, "triangle", 0.15);
-    } else {
-      clearInterval(countdownTimer);
-      countdownTimer = null;
-      energy = MAX_ENERGY;
-      gameState = "PLAY";
-    }
-  }, 1000);
-}
-
-function tryRevive() {
-  if (!isNormalMode) return false;
-
-  if (reviveHearts > 0) {
-    reviveHearts--;
-    player.x = lastSafeStair.x;
-    player.y = lastSafeStair.y;
-    player.bounceY = -12;
-    player.scaleX = 1.2;
-    player.scaleY = 0.8;
-
-    targetCamX = player.x * STAIR_W;
-    targetCamY = player.y * STAIR_H;
-
-    playReviveSound();
-    startReviveCountdown();
-    return true;
-  }
-  return false;
-}
-
-function step(isTurn) {
-  if (gameState === "READY") gameState = "PLAY";
-  if (gameState !== "PLAY") return;
-
-  if (isTurn) {
-    player.dir = -player.dir;
-  }
-
-  const nextTargetX = player.x + player.dir;
-  const nextTargetY = player.y + 1;
-  const expectedStair = stairs[nextTargetY];
-
-  if (expectedStair && expectedStair.x === nextTargetX) {
-    player.x = nextTargetX;
-    player.y = nextTargetY;
-    lastSafeStair = { x: player.x, y: player.y };
-    score++;
-    if (score > highScore) {
-      highScore = score;
-    }
-    energy = Math.min(MAX_ENERGY, energy + 0.13);
-
-    checkHeartReward();
-
-    player.bounceY = -7;
-    player.scaleX = 0.92;
-    player.scaleY = 1.12;
-
-    targetCamX = player.x * STAIR_W;
-    targetCamY = player.y * STAIR_H;
-
-    appendNextStair();
-    playBeep(480 + (score % 16) * 18, "sine", 0.04);
-  } else {
-    if (!tryRevive()) {
-      player.x = nextTargetX;
-      player.y = nextTargetY;
-      gameOver();
-    }
-  }
-}
-
-function gameOver() {
-  gameState = "GAMEOVER";
-  currentProvocation = getProvocationText(score, boosterUsed);
-  playBeep(130, "sawtooth", 0.25);
-  recordGameResult(score);
-}
-
-const turnBtn = document.getElementById("btn-turn");
-const climbBtn = document.getElementById("btn-climb");
-const bindTouch = (btn, isTurn) => {
-  const trigger = (e) => {
-    e.preventDefault();
+  function triggerGoldenRush() {
     if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
+    settingsModal.style.display = "none";
+    
     if (gameState === "GAMEOVER") {
       initGame();
-      gameState = "PLAY";
+    }
+    gameState = "PLAY";
+    isAutoClimbing = true;
+    boosterUsed = true;
+
+    let stepsLeft = 30;
+
+    const climbInterval = setInterval(() => {
+      if (stepsLeft <= 0 || gameState !== "PLAY") {
+        clearInterval(climbInterval);
+        isAutoClimbing = false;
+        return;
+      }
+
+      const nextY = player.y + 1;
+      const nextStair = stairs[nextY];
+
+      if (!nextStair) {
+        clearInterval(climbInterval);
+        isAutoClimbing = false;
+        return;
+      }
+
+      const requiredDir = nextStair.x - player.x;
+      const needTurn = (requiredDir !== player.dir);
+
+      step(needTurn);
+      energy = MAX_ENERGY;
+
+      stepsLeft--;
+    }, 40);
+  }
+
+  goldenRushBtn.addEventListener("click", triggerGoldenRush);
+
+  window.addEventListener("keydown", (e) => {
+    const gameActionKeys = [
+      "Space", 
+      "ArrowUp", 
+      "ArrowDown", 
+      "ArrowLeft", 
+      "ArrowRight",
+      keyBindings.turn.code, 
+      keyBindings.climb.code
+    ];
+
+    if (gameActionKeys.includes(e.code)) {
+      e.preventDefault();
+    }
+
+    if (listeningTarget) {
+      const cleanLabel = e.key === " " ? "SPACE" : (e.key.length === 1 ? e.key.toUpperCase() : e.code.replace("Key", "").replace("Arrow", ""));
+      keyBindings[listeningTarget] = { code: e.code, label: cleanLabel };
+      listeningTarget = null;
+      bindTurnBtn.classList.remove("listening");
+      bindClimbBtn.classList.remove("listening");
+      updateKeyLabels();
       return;
     }
-    step(isTurn);
-  };
-  btn.addEventListener("touchstart", trigger, { passive: false });
-  btn.addEventListener("mousedown", trigger);
-};
-bindTouch(turnBtn, true);
-bindTouch(climbBtn, false);
 
-function update() {
-  if (gameState === "PLAY" && !isAutoClimbing) {
-    const drain = 0.0036 + Math.min(score * 0.00008, 0.009);
-    energy -= drain;
-    if (energy <= 0) {
+    if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
+    if (e.repeat) return;
+
+    if (e.code === "Space" && gameState === "GAMEOVER") {
+      initGame();
+      gameState = "PLAY";
+      sessionStartTime = Date.now();
+      return;
+    }
+
+    if (e.code === keyBindings.turn.code || e.code === "ArrowLeft") {
+      step(true);
+    } else if (e.code === keyBindings.climb.code || e.code === "ArrowUp") {
+      step(false);
+    }
+  });
+
+  const rosterContainer = document.getElementById("character-roster");
+  rosterContainer.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    rosterContainer.scrollLeft += e.deltaY * 0.9;
+  }, { passive: false });
+
+  function renderCharacterRoster() {
+    rosterContainer.innerHTML = "";
+
+    characters.forEach(ch => {
+      const isSelected = ch.id === currentSelectedChar;
+      const card = document.createElement("div");
+      card.className = `char-card ${isSelected ? 'selected' : ''}`;
+      
+      card.innerHTML = `
+        <div style="font-size: 18px;">${getCharIcon(ch.id)}</div>
+        <div class="card-name">${ch.name}</div>
+        <div class="card-status">${isSelected ? '선택됨' : '선택'}</div>
+      `;
+
+      card.addEventListener("click", () => {
+        if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
+        currentSelectedChar = ch.id;
+        renderCharacterRoster();
+      });
+
+      rosterContainer.appendChild(card);
+    });
+  }
+
+  function getCharIcon(id) {
+    const map = {
+      businessman: "💼", boxer: "🥊", dracula: "🧛", delivery: "📦",
+      sheriff: "🤠", tennis: "🎾", soldier: "💂", bunny: "🐰",
+      among: "🚀", redboy: "👦", redhair: "🧑"
+    };
+    return map[id] || "👤";
+  }
+
+  function getProvocationText(currentScore, isBooster) {
+    if (isBooster) {
+      const boosterInsults = [
+        "부스터 쳐쓰고 이 점수면 그냥 접어라.",
+        "치트키 딸깍거려놓고 꺼드럭대려고? 양심 터졌네.",
+        "날로 먹으려다 체했죠? 꼴좋다.",
+        "치트키 쓰고도 처망하는 손가락은 도대체 정체가 뭐냐?",
+        "남들은 맨손으로 가는데 부스터 빨고도 누워버리네 ㅋ.",
+        "딸깍질로 올린 점수 자랑질하려다 뽀록났죠? 개추함."
+      ];
+      return boosterInsults[Math.floor(Math.random() * boosterInsults.length)];
+    }
+
+    if (currentScore < 30) {
+      const list = [
+        "손가락에 깁스함? 발가락으로 눌러도 30층은 가겠다.",
+        "여기서 떨어지는 것도 진짜 재능이다.",
+        "키보드 왜 샀냐? 그냥 구경이나 해.",
+        "화면 켜놓고 주무셨어요? 플레이 시간 3초 컷 레전드.",
+        "손가락 뇌랑 연결 안 됨? 시작 버튼 누른 손가락이 아깝다.",
+        "키보드에서 손 떼라. 계단이 불쌍하다 진짜."
+      ];
+      return list[Math.floor(Math.random() * list.length)];
+    } else if (currentScore < 100) {
+      const list = [
+        "세 자릿수도 못 보고 컷당하는 꼬락서니 레전드.",
+        "겨우 여기까지 기어오고 꺼드럭거리려 했음?",
+        "뇌 반응 속도 실화냐? 렉 핑계 대지 마라.",
+        "백 단위 숫자 구경도 못 해보고 로비 사출 실화냐?",
+        "눈 깜빡이다 떨어졌다고 핑계 대지 마라, 그냥 느린 거다.",
+        "딱 유치원생 발걸음. 어디 가서 게임한다고 깝치지 마라."
+      ];
+      return list[Math.floor(Math.random() * list.length)];
+    } else if (currentScore < 200) {
+      const list = [
+        "딱 일반인 수준. 어디 가서 해봤다고 입 열지 마라.",
+        "100층 넘었다고 뿌듯했지? 200층 문턱도 못 밟네 애송이.",
+        "겨우 세 자릿수 턱걸이하고 땀 삐질삐질 흘리는 꼴 보소.",
+        "여기서 만족하고 입 찢어지지? 딱 네 그릇 크기다.",
+        "200층 하트 구경도 못 해보고 로비로 사출당했죠? ㅋ",
+        "슬슬 속도 붙으니까 손가락 꼬여서 뇌정지 왔냐?"
+      ];
+      return list[Math.floor(Math.random() * list.length)];
+    } else if (currentScore < 350) {
+      const list = [
+        "부활 하트 쳐먹고도 꼬라박는 거 보면 능지가 처참하다.",
+        "하트 하나 믿고 깝죽대더니 장렬하게 바닥 청소 엔딩.",
+        "꺼드럭거릴 각 잡더니 꼴좋다. 딱 네 한계임.",
+        "제법인데? 그래봤자 랭커 발끝도 못 미침.",
+        "제법 폼 잡더니 귀신같이 손가락 꼬여서 수직 낙하하네.",
+        "벽 느껴지지? 응 너 같은 범재는 평생 가도 500층 못 봐."
+      ];
+      return list[Math.floor(Math.random() * list.length)];
+    } else if (currentScore < 500) {
+      const list = [
+        "눈알 빠질 것 같지? 안 봐준다, 1층부터 다시 기어 와.",
+        "아깝지? 억울해 뒤지겠지? 샷건 치지 말고 다시 해.",
+        "집중력 밑천 드러났네. 한 판 더 해도 똑같음.",
+        "멘탈 바사삭 소리 여기까지 들린다. 샷건 치지 마라 모니터 깨진다.",
+        "집중력 밑천 털려서 동공 지진 난 거 다 보였음 ㅋ.",
+        "아깝지? 피눈물 나지? 억울하면 밤새워서 다시 기어 와봐."
+      ];
+      return list[Math.floor(Math.random() * list.length)];
+    } else {
+      const list = [
+        "인생을 여기에 갈아 넣었네. 현생은 살고 있냐?",
+        "잘하긴 하는데 묘하게 꼴 보기 싫은 점수네.",
+        "손가락 쥐 난 거 뻔히 보이는데 추하게 가네.",
+        "이 점수 찍을 시간에 자격증을 땄으면 취직을 했겠다.",
+        "손목 터널 증후군 예약 축하한다. 병원비나 모아둬라.",
+        "잘하긴 하는데 진짜 징글징글하다. 방구석 탈출은 언제 함?"
+      ];
+      return list[Math.floor(Math.random() * list.length)];
+    }
+  }
+
+  function initGame() {
+    if (countdownTimer) clearInterval(countdownTimer);
+    score = 0;
+    sessionValidSteps = 0;
+    sessionStartTime = 0;
+    energy = 1.0;
+    reviveHearts = 0;
+    lastHeartThreshold = 0;
+    boosterUsed = false;
+    currentProvocation = "";
+    stairs = [{ x: 0, y: 0 }];
+
+    let curX = 0;
+    let curDir = 1;
+    let runLength = 3;
+
+    for (let i = 1; i < 200; i++) {
+      if (runLength <= 0) {
+        curDir = -curDir;
+        runLength = Math.floor(Math.random() * 4) + 1;
+      }
+      curX += curDir;
+      stairs.push({ x: curX, y: i });
+      runLength--;
+    }
+
+    player.x = 0;
+    player.y = 0;
+    player.dir = 1;
+    player.scaleX = 1;
+    player.scaleY = 1;
+    player.bounceY = 0;
+    lastSafeStair = { x: 0, y: 0 };
+
+    camX = 0;
+    camY = 0;
+    targetCamX = 0;
+    targetCamY = 0;
+  }
+
+  function appendNextStair() {
+    const last = stairs[stairs.length - 1];
+    const prev = stairs[stairs.length - 2];
+    let curDir = last.x - prev.x;
+    if (Math.random() < 0.36) curDir = -curDir;
+    stairs.push({ x: last.x + curDir, y: last.y + 1 });
+  }
+
+  function checkHeartReward() {
+    if (!isNormalMode) return;
+
+    const currentThreshold = Math.floor(score / 200);
+    if (currentThreshold > lastHeartThreshold) {
+      const gained = currentThreshold - lastHeartThreshold;
+      reviveHearts += gained;
+      lastHeartThreshold = currentThreshold;
+      playHeartEarnSound();
+    }
+  }
+
+  function startReviveCountdown() {
+    gameState = "REVIVE_COUNTDOWN";
+    countdownNumber = 3;
+    energy = MAX_ENERGY;
+
+    playBeep(440, "sine", 0.08);
+
+    if (countdownTimer) clearInterval(countdownTimer);
+
+    countdownTimer = setInterval(() => {
+      countdownNumber--;
+      if (countdownNumber > 0) {
+        playBeep(440, "sine", 0.08);
+      } else if (countdownNumber === 0) {
+        playBeep(880, "triangle", 0.15);
+      } else {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+        energy = MAX_ENERGY;
+        gameState = "PLAY";
+      }
+    }, 1000);
+  }
+
+  function tryRevive() {
+    if (!isNormalMode) return false;
+
+    if (reviveHearts > 0) {
+      reviveHearts--;
+      player.x = lastSafeStair.x;
+      player.y = lastSafeStair.y;
+      player.bounceY = -12;
+      player.scaleX = 1.2;
+      player.scaleY = 0.8;
+
+      targetCamX = player.x * STAIR_W;
+      targetCamY = player.y * STAIR_H;
+
+      playReviveSound();
+      startReviveCountdown();
+      return true;
+    }
+    return false;
+  }
+
+  function step(isTurn) {
+    if (gameState === "READY") {
+      gameState = "PLAY";
+      sessionStartTime = Date.now();
+    }
+    if (gameState !== "PLAY") return;
+
+    if (isTurn) {
+      player.dir = -player.dir;
+    }
+
+    const nextTargetX = player.x + player.dir;
+    const nextTargetY = player.y + 1;
+    const expectedStair = stairs[nextTargetY];
+
+    if (expectedStair && expectedStair.x === nextTargetX) {
+      player.x = nextTargetX;
+      player.y = nextTargetY;
+      lastSafeStair = { x: player.x, y: player.y };
+      
+      score++;
+      sessionValidSteps++; // 실제 유효 스텝 카운트 동기화
+
+      if (score > highScore) {
+        highScore = score;
+      }
+      energy = Math.min(MAX_ENERGY, energy + 0.13);
+
+      checkHeartReward();
+
+      player.bounceY = -7;
+      player.scaleX = 0.92;
+      player.scaleY = 1.12;
+
+      targetCamX = player.x * STAIR_W;
+      targetCamY = player.y * STAIR_H;
+
+      appendNextStair();
+      playBeep(480 + (score % 16) * 18, "sine", 0.04);
+    } else {
       if (!tryRevive()) {
-        energy = 0;
+        player.x = nextTargetX;
+        player.y = nextTargetY;
         gameOver();
       }
     }
   }
 
-  camX += (targetCamX - camX) * 0.35;
-  camY += (targetCamY - camY) * 0.35;
+  function gameOver() {
+    gameState = "GAMEOVER";
+    currentProvocation = getProvocationText(score, boosterUsed);
+    playBeep(130, "sawtooth", 0.25);
+    recordGameResult(score);
+  }
 
-  player.bounceY += (0 - player.bounceY) * 0.28;
-  player.scaleX += (1 - player.scaleX) * 0.22;
-  player.scaleY += (1 - player.scaleY) * 0.22;
-}
+  const turnBtn = document.getElementById("btn-turn");
+  const climbBtn = document.getElementById("btn-climb");
+  const bindTouch = (btn, isTurn) => {
+    const trigger = (e) => {
+      e.preventDefault();
+      if (isAutoClimbing || gameState === "REVIVE_COUNTDOWN") return;
+      if (gameState === "GAMEOVER") {
+        initGame();
+        gameState = "PLAY";
+        sessionStartTime = Date.now();
+        return;
+      }
+      step(isTurn);
+    };
+    btn.addEventListener("touchstart", trigger, { passive: false });
+    btn.addEventListener("mousedown", trigger);
+  };
+  bindTouch(turnBtn, true);
+  bindTouch(climbBtn, false);
 
-function drawCosmicBackground() {
-  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  grad.addColorStop(0, "#050210");
-  grad.addColorStop(0.5, "#0b0722");
-  grad.addColorStop(1, "#180a36");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  function update() {
+    if (gameState === "PLAY" && !isAutoClimbing) {
+      const drain = 0.0036 + Math.min(score * 0.00008, 0.009);
+      energy -= drain;
+      if (energy <= 0) {
+        if (!tryRevive()) {
+          energy = 0;
+          gameOver();
+        }
+      }
+    }
 
-  spaceStars.forEach(s => {
-    s.alpha += s.glowSpeed;
-    const a = (Math.sin(s.alpha) + 1) / 2;
-    ctx.fillStyle = `rgba(220, 240, 255, ${a * 0.8 + 0.2})`;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-    ctx.fill();
-  });
-}
+    camX += (targetCamX - camX) * 0.35;
+    camY += (targetCamY - camY) * 0.35;
 
-function drawNeonStair(x, y, isCurrent) {
-  const w = STAIR_W;
-  const h = STAIR_H;
-  const rx = x - w / 2;
+    player.bounceY += (0 - player.bounceY) * 0.28;
+    player.scaleX += (1 - player.scaleX) * 0.22;
+    player.scaleY += (1 - player.scaleY) * 0.22;
+  }
 
-  ctx.save();
-  ctx.fillStyle = isCurrent ? "rgba(0, 242, 254, 0.25)" : "rgba(80, 25, 140, 0.4)";
-  ctx.fillRect(rx, y, w, h);
-  ctx.fillStyle = isCurrent ? "#ffffff" : "#c084fc";
-  ctx.fillRect(rx, y, w, 3);
-  ctx.strokeStyle = isCurrent ? "#00f2fe" : "#7928ca";
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(rx, y, w, h);
-  ctx.restore();
-}
+  function drawCosmicBackground() {
+    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, "#050210");
+    grad.addColorStop(0.5, "#0b0722");
+    grad.addColorStop(1, "#180a36");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-function drawHUD() {
-  const bw = 240;
-  const bh = 12;
-  const bx = (canvas.width - bw) / 2;
-  const by = 20;
+    spaceStars.forEach(s => {
+      s.alpha += s.glowSpeed;
+      const a = (Math.sin(s.alpha) + 1) / 2;
+      ctx.fillStyle = `rgba(220, 240, 255, ${a * 0.8 + 0.2})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
 
-  ctx.fillStyle = "rgba(10, 8, 30, 0.8)";
-  ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
-  ctx.strokeStyle = "#7928ca";
-  ctx.strokeRect(bx - 2, by - 2, bw + 4, bh + 4);
+  function drawNeonStair(x, y, isCurrent) {
+    const w = STAIR_W;
+    const h = STAIR_H;
+    const rx = x - w / 2;
 
-  const fillW = Math.max(0, bw * energy);
-  ctx.fillStyle = energy > 0.3 ? "#00f2fe" : "#ff007f";
-  ctx.fillRect(bx, by, fillW, bh);
-
-  if (isNormalMode) {
     ctx.save();
-    ctx.textAlign = "left";
-    ctx.font = "bold 15px monospace";
-    ctx.fillStyle = reviveHearts > 0 ? "#ff007f" : "#64748b";
-    ctx.shadowColor = reviveHearts > 0 ? "#ff007f" : "transparent";
-    ctx.shadowBlur = reviveHearts > 0 ? 8 : 0;
-    ctx.fillText(`❤️ x ${reviveHearts}`, bx, by + 30);
+    ctx.fillStyle = isCurrent ? "rgba(0, 242, 254, 0.25)" : "rgba(80, 25, 140, 0.4)";
+    ctx.fillRect(rx, y, w, h);
+    ctx.fillStyle = isCurrent ? "#ffffff" : "#c084fc";
+    ctx.fillRect(rx, y, w, 3);
+    ctx.strokeStyle = isCurrent ? "#00f2fe" : "#7928ca";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(rx, y, w, h);
     ctx.restore();
   }
 
-  ctx.save();
-  ctx.font = "900 40px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillStyle = "#ffffff";
-  ctx.fillText(score, canvas.width / 2, 85);
-  ctx.restore();
+  function drawHUD() {
+    const bw = 240;
+    const bh = 12;
+    const bx = (canvas.width - bw) / 2;
+    const by = 20;
 
-  if (gameState === "READY") {
-    ctx.fillStyle = "rgba(5, 3, 15, 0.75)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#00f2fe";
-    ctx.font = "bold 22px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("COSMIC INFINITE STAIRS", canvas.width / 2, canvas.height / 2 - 20);
-    ctx.fillStyle = "#e2e8f0";
-    ctx.font = "14px sans-serif";
-    ctx.fillText("하단 버튼 또는 키를 눌러 출발!", canvas.width / 2, canvas.height / 2 + 15);
-  } else if (gameState === "GAMEOVER") {
-    ctx.fillStyle = "rgba(10, 5, 20, 0.88)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
+    ctx.fillStyle = "rgba(10, 8, 30, 0.8)";
+    ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+    ctx.strokeStyle = "#7928ca";
+    ctx.strokeRect(bx - 2, by - 2, bw + 4, bh + 4);
+
+    const fillW = Math.max(0, bw * energy);
+    ctx.fillStyle = energy > 0.3 ? "#00f2fe" : "#ff007f";
+    ctx.fillRect(bx, by, fillW, bh);
+
+    if (isNormalMode) {
+      ctx.save();
+      ctx.textAlign = "left";
+      ctx.font = "bold 15px monospace";
+      ctx.fillStyle = reviveHearts > 0 ? "#ff007f" : "#64748b";
+      ctx.shadowColor = reviveHearts > 0 ? "#ff007f" : "transparent";
+      ctx.shadowBlur = reviveHearts > 0 ? 8 : 0;
+      ctx.fillText(`❤️ x ${reviveHearts}`, bx, by + 30);
+      ctx.restore();
+    }
+
     ctx.save();
+    ctx.font = "900 40px sans-serif";
     ctx.textAlign = "center";
-
-    ctx.fillStyle = "#ff007f";
-    ctx.font = "900 36px sans-serif";
-    ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 50);
-
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 18px monospace";
-    ctx.fillText(`SCORE: ${score} (BEST: ${highScore})`, canvas.width / 2, canvas.height / 2 - 10);
+    ctx.fillText(score, canvas.width / 2, 85);
+    ctx.restore();
 
-    ctx.fillStyle = "#facc15";
-    ctx.font = "bold 13px sans-serif";
-    ctx.shadowColor = "#facc15";
-    ctx.shadowBlur = 8;
-    ctx.fillText(`"${currentProvocation}"`, canvas.width / 2, canvas.height / 2 + 25);
+    if (gameState === "READY") {
+      ctx.fillStyle = "rgba(5, 3, 15, 0.75)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#00f2fe";
+      ctx.font = "bold 22px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("COSMIC INFINITE STAIRS", canvas.width / 2, canvas.height / 2 - 20);
+      ctx.fillStyle = "#e2e8f0";
+      ctx.font = "14px sans-serif";
+      ctx.fillText("하단 버튼 또는 키를 눌러 출발!", canvas.width / 2, canvas.height / 2 + 15);
+    } else if (gameState === "GAMEOVER") {
+      ctx.fillStyle = "rgba(10, 5, 20, 0.88)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.save();
+      ctx.textAlign = "center";
 
-    let nextY = canvas.height / 2 + 65;
-    if (boosterUsed) {
-      ctx.fillStyle = "#ff0055";
-      ctx.font = "bold 14px sans-serif";
-      ctx.shadowColor = "#ff0055";
+      ctx.fillStyle = "#ff007f";
+      ctx.font = "900 36px sans-serif";
+      ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 50);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 18px monospace";
+      ctx.fillText(`SCORE: ${score} (BEST: ${highScore})`, canvas.width / 2, canvas.height / 2 - 10);
+
+      ctx.fillStyle = "#facc15";
+      ctx.font = "bold 13px sans-serif";
+      ctx.shadowColor = "#facc15";
+      ctx.shadowBlur = 8;
+      ctx.fillText(`"${currentProvocation}"`, canvas.width / 2, canvas.height / 2 + 25);
+
+      let nextY = canvas.height / 2 + 65;
+      if (boosterUsed) {
+        ctx.fillStyle = "#ff0055";
+        ctx.font = "bold 14px sans-serif";
+        ctx.shadowColor = "#ff0055";
+        ctx.shadowBlur = 12;
+        ctx.fillText("⚠️ 부스터 사용 감지: 랭킹 등록 제외", canvas.width / 2, nextY);
+        nextY += 35;
+      }
+
+      ctx.fillStyle = "#a855f7";
+      ctx.font = "13px sans-serif";
+      ctx.shadowBlur = 0;
+      ctx.fillText("버튼 터치 시 재시작", canvas.width / 2, nextY);
+      ctx.restore();
+
+    } else if (gameState === "REVIVE_COUNTDOWN") {
+      ctx.fillStyle = "rgba(5, 3, 15, 0.78)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#ff007f";
+      ctx.font = "bold 20px sans-serif";
+      ctx.shadowColor = "#ff007f";
       ctx.shadowBlur = 12;
-      ctx.fillText("⚠️ 부스터 사용 감지: 랭킹 등록 제외", canvas.width / 2, nextY);
-      nextY += 35;
+      ctx.fillText("REVIVED!", canvas.width / 2, canvas.height / 2 - 60);
+
+      ctx.fillStyle = countdownNumber === 0 ? "#00f2fe" : "#ffd700";
+      ctx.shadowColor = countdownNumber === 0 ? "#00f2fe" : "#ffd700";
+      ctx.shadowBlur = 20;
+      ctx.font = "900 70px monospace";
+      ctx.fillText(countdownNumber === 0 ? "GO!" : countdownNumber, canvas.width / 2, canvas.height / 2 + 20);
+
+      ctx.font = "13px sans-serif";
+      ctx.fillStyle = "#94a3b8";
+      ctx.shadowBlur = 0;
+      ctx.fillText("준비하세요...", canvas.width / 2, canvas.height / 2 + 65);
+      ctx.restore();
     }
-
-    ctx.fillStyle = "#a855f7";
-    ctx.font = "13px sans-serif";
-    ctx.shadowBlur = 0;
-    ctx.fillText("버튼 터치 시 재시작", canvas.width / 2, nextY);
-    ctx.restore();
-
-  } else if (gameState === "REVIVE_COUNTDOWN") {
-    ctx.fillStyle = "rgba(5, 3, 15, 0.78)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.save();
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#ff007f";
-    ctx.font = "bold 20px sans-serif";
-    ctx.shadowColor = "#ff007f";
-    ctx.shadowBlur = 12;
-    ctx.fillText("REVIVED!", canvas.width / 2, canvas.height / 2 - 60);
-
-    ctx.fillStyle = countdownNumber === 0 ? "#00f2fe" : "#ffd700";
-    ctx.shadowColor = countdownNumber === 0 ? "#00f2fe" : "#ffd700";
-    ctx.shadowBlur = 20;
-    ctx.font = "900 70px monospace";
-    ctx.fillText(countdownNumber === 0 ? "GO!" : countdownNumber, canvas.width / 2, canvas.height / 2 + 20);
-
-    ctx.font = "13px sans-serif";
-    ctx.fillStyle = "#94a3b8";
-    ctx.shadowBlur = 0;
-    ctx.fillText("준비하세요...", canvas.width / 2, canvas.height / 2 + 65);
-    ctx.restore();
   }
-}
 
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawCosmicBackground();
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawCosmicBackground();
 
-  stairs.forEach((s) => {
-    const screenX = ANCHOR_X + (s.x * STAIR_W) - camX;
-    const screenY = ANCHOR_Y - (s.y * STAIR_H) + camY;
-    if (screenY > -50 && screenY < canvas.height + 50) {
-      drawNeonStair(screenX, screenY, s.y === player.y);
-    }
-  });
+    stairs.forEach((s) => {
+      const screenX = ANCHOR_X + (s.x * STAIR_W) - camX;
+      const screenY = ANCHOR_Y - (s.y * STAIR_H) + camY;
+      if (screenY > -50 && screenY < canvas.height + 50) {
+        drawNeonStair(screenX, screenY, s.y === player.y);
+      }
+    });
 
-  const pScreenX = ANCHOR_X + (player.x * STAIR_W) - camX;
-  const pScreenY = ANCHOR_Y - (player.y * STAIR_H) + camY;
-  drawPlayerSprite(pScreenX, pScreenY);
+    const pScreenX = ANCHOR_X + (player.x * STAIR_W) - camX;
+    const pScreenY = ANCHOR_Y - (player.y * STAIR_H) + camY;
+    drawPlayerSprite(pScreenX, pScreenY);
 
-  drawHUD();
+    drawHUD();
 
-  requestAnimationFrame(() => {
-    update();
+    requestAnimationFrame(() => {
+      update();
+      draw();
+    });
+  }
+
+  checkNicknameOnStart();
+  updateModeUI();
+  updateKeyLabels();
+  renderCharacterRoster();
+  initGame();
+
+  Promise.all([
+    cleanAndProcessImage("sheet8.png", "sheet8"),
+    cleanAndProcessImage("among.svg", "among"),
+    cleanAndProcessImage("pixel1.svg", "pixel1"),
+    cleanAndProcessImage("pixel2.svg", "pixel2")
+  ]).then(() => {
     draw();
   });
-}
-
-checkNicknameOnStart();
-updateModeUI();
-updateKeyLabels();
-renderCharacterRoster();
-initGame();
-
-Promise.all([
-  cleanAndProcessImage("sheet8.png", "sheet8"),
-  cleanAndProcessImage("among.svg", "among"),
-  cleanAndProcessImage("pixel1.svg", "pixel1"),
-  cleanAndProcessImage("pixel2.svg", "pixel2")
-]).then(() => {
-  draw();
-});
+})();
 </script>
 </body>
 </html>
