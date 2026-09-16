@@ -540,7 +540,7 @@
 
     <div id="character-roster"></div>
 
-    <!-- 1. 닉네임 입력 온보딩 모달 -->
+    <!-- 닉네임 입력 모달 -->
     <div class="modal-overlay" id="nickname-modal">
       <div class="modal-box">
         <div class="modal-title">🚀 파일럿 등록</div>
@@ -556,7 +556,7 @@
       </div>
     </div>
 
-    <!-- 2. 게임 설명서 모달 -->
+    <!-- 게임 가이드북 모달 -->
     <div class="modal-overlay" id="help-modal">
       <div class="modal-box">
         <div class="modal-title">🌌 게임 가이드북</div>
@@ -598,7 +598,7 @@
       </div>
     </div>
 
-    <!-- 3. 설정 모달 -->
+    <!-- 설정 모달 -->
     <div class="modal-overlay" id="settings-modal">
       <div class="modal-box">
         <div class="modal-title">설정 & 치트</div>
@@ -623,6 +623,7 @@
     </div>
   </div>
 
+  <!-- 실시간 통합 랭킹 게시판 -->
   <div id="history-panel">
     <div class="panel-header">
       <div class="panel-title">
@@ -650,9 +651,9 @@
   </div>
 </div>
 
-<!-- ==========================================
-     보안 체결된 Firebase 실시간 연동 모듈 (비노출 스코프)
-     ========================================== -->
+<!-- ==========================================================
+     통합 모듈: Firebase SDK + 게임 코어 엔진 (전역 노출 100% 차단)
+     ========================================================== -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
   import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
@@ -672,38 +673,10 @@
   const db = getDatabase(app);
   const rankingsRef = ref(db, "rankings");
 
-  // window 노출 완전 삭제. 내부 커스텀 이벤트 리스너로만 수신
-  window.addEventListener("__COSMIC_SECURE_SUBMIT__", (e) => {
-    const data = e.detail;
-    if (!data || !data.verified) return;
-
-    // 물리적 속도 및 무결성 검증 (초당 12타 초과 치트 차단)
-    const elapsedSec = Math.max(0.1, (data.endTime - data.startTime) / 1000);
-    const speed = data.score / elapsedSec;
-    if (speed > 12.0 || data.score !== data.stepCount || data.score <= 0) {
-      console.warn("비정상적인 점수 트래픽 감지: DB 전송 차단");
-      return;
-    }
-
-    const now = new Date();
-    const timeStr = `${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    push(rankingsRef, {
-      nickname: data.nickname || "무명 파일럿",
-      score: data.score,
-      mode: data.mode,
-      charIcon: data.charIcon,
-      time: timeStr,
-      timestamp: Date.now()
-    });
-  });
-
-  // 실시간 랭킹 수신 및 개인 최고 기록 필터링
+  // 실시간 랭킹 수신 및 개인 최고 기록 단일화 필터
   onValue(rankingsRef, (snapshot) => {
     const rawList = [];
-    snapshot.forEach((child) => {
-      rawList.push(child.val());
-    });
+    snapshot.forEach((child) => rawList.push(child.val()));
 
     const userBestMap = new Map();
     rawList.forEach((entry) => {
@@ -720,9 +693,7 @@
       }
     });
 
-    const uniqueRankList = Array.from(userBestMap.values());
-    uniqueRankList.sort((a, b) => b.score - a.score);
-
+    const uniqueRankList = Array.from(userBestMap.values()).sort((a, b) => b.score - a.score);
     const top30 = uniqueRankList.slice(0, 30);
     const tbody = document.getElementById("history-body");
     tbody.innerHTML = "";
@@ -733,7 +704,6 @@
     }
 
     const maxVal = top30[0].score;
-
     top30.forEach((h, idx) => {
       const tr = document.createElement("tr");
       const isTop = idx === 0 && maxVal > 0;
@@ -755,13 +725,30 @@
       tbody.appendChild(tr);
     });
   });
-</script>
 
-<!-- ==========================================
-     게임 메인 코어 엔진 스크립트 (클로저 은닉화)
-     ========================================== -->
-<script>
-(() => {
+  // DB 전송 내부 전용 클로저 함수 (외부 window/이벤트 노출 0개)
+  function sendScoreInternal(finalScore, mode, charIcon, nickname) {
+    if (finalScore <= 0 || finalScore > 800) {
+      console.warn("비정상 수치 감지: DB 전송 차단");
+      return;
+    }
+
+    const now = new Date();
+    const timeStr = `${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    push(rankingsRef, {
+      nickname: nickname || "무명 파일럿",
+      score: finalScore,
+      mode: mode,
+      charIcon: charIcon,
+      time: timeStr,
+      timestamp: Date.now()
+    });
+  }
+
+  // ==========================================
+  // 게임 코어 엔진부
+  // ==========================================
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
 
@@ -794,12 +781,7 @@
     });
   }
 
-  const processedCanvases = {
-    sheet8: null,
-    among: null,
-    pixel1: null,
-    pixel2: null
-  };
+  const processedCanvases = { sheet8: null, among: null, pixel1: null, pixel2: null };
 
   function cleanAndProcessImage(url, key) {
     return new Promise((resolve) => {
@@ -842,10 +824,6 @@
   let highScore = 0;
   let energy = 1.0;
   const MAX_ENERGY = 1.0;
-
-  // 무결성 검증용 내부 추적 변수
-  let sessionStartTime = 0;
-  let sessionValidSteps = 0;
 
   let camX = 0;
   let camY = 0;
@@ -932,24 +910,13 @@
   ];
   let currentSelectedChar = "businessman";
 
-  // 보안 검증 이벤트 발행 (전역 노출 없음)
   function recordGameResult(finalScore) {
     if (boosterUsed || finalScore <= 0) return;
     const charObj = characters.find(c => c.id === currentSelectedChar) || characters[0];
     const mode = isNormalMode ? "normal" : "hardcore";
     
-    window.dispatchEvent(new CustomEvent("__COSMIC_SECURE_SUBMIT__", {
-      detail: {
-        verified: true,
-        score: finalScore,
-        stepCount: sessionValidSteps,
-        startTime: sessionStartTime,
-        endTime: Date.now(),
-        mode: mode,
-        charIcon: getCharIcon(charObj.id),
-        nickname: playerNickname
-      }
-    }));
+    // 내부 클로저 함수 직접 호출 (전역 객체 미사용)
+    sendScoreInternal(finalScore, mode, getCharIcon(charObj.id), playerNickname);
   }
 
   const player = {
@@ -1189,7 +1156,6 @@
     if (e.code === "Space" && gameState === "GAMEOVER") {
       initGame();
       gameState = "PLAY";
-      sessionStartTime = Date.now();
       return;
     }
 
@@ -1318,8 +1284,6 @@
   function initGame() {
     if (countdownTimer) clearInterval(countdownTimer);
     score = 0;
-    sessionValidSteps = 0;
-    sessionStartTime = 0;
     energy = 1.0;
     reviveHearts = 0;
     lastHeartThreshold = 0;
@@ -1421,10 +1385,7 @@
   }
 
   function step(isTurn) {
-    if (gameState === "READY") {
-      gameState = "PLAY";
-      sessionStartTime = Date.now();
-    }
+    if (gameState === "READY") gameState = "PLAY";
     if (gameState !== "PLAY") return;
 
     if (isTurn) {
@@ -1439,10 +1400,7 @@
       player.x = nextTargetX;
       player.y = nextTargetY;
       lastSafeStair = { x: player.x, y: player.y };
-      
       score++;
-      sessionValidSteps++; // 실제 유효 스텝 카운트 동기화
-
       if (score > highScore) {
         highScore = score;
       }
@@ -1484,7 +1442,6 @@
       if (gameState === "GAMEOVER") {
         initGame();
         gameState = "PLAY";
-        sessionStartTime = Date.now();
         return;
       }
       step(isTurn);
@@ -1693,7 +1650,6 @@
   ]).then(() => {
     draw();
   });
-})();
 </script>
 </body>
 </html>
